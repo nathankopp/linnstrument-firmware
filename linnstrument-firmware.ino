@@ -647,6 +647,7 @@ struct SplitSettings {
   boolean ccForZ14Bit;                    // true when 14-bit messages should be sent when Z CC is between 0-31, false when only 7-bit messages should be sent
   CurveType curveForZ;
   unsigned short ccForFader[8];           // each fader can control a CC number ranging from 0-128 (with 128 being placeholder for ChannelPressure)
+  unsigned short valForFader[8];          // each fader has an initial value ranging from 0-127
   byte colorMain;                         // color for non-accented cells
   byte colorAccent;                       // color for accented cells
   byte colorPlayed;                       // color for played notes

@@ -226,17 +226,27 @@ void handleLowRowState(boolean newVelocity, short pitchBend, short timbre, byte 
   }
 }
 
+void paintLowRowCCX(byte split) {
+  byte faderLeft, faderLength;
+  determineFaderBoundaries(split, faderLeft, faderLength);
+  paintCCFaderDisplayRow(split, 0, Split[split].colorLowRow, Split[split].ccForLowRow, faderLeft, faderLength);
+}
+
 void sendLowRowCCX(unsigned short x) {
   if (Split[sensorSplit].lowRowCCXBehavior == lowRowCCFader) {
     ccFaderValues[sensorSplit][Split[sensorSplit].ccForLowRow] = x;
-
-    byte faderLeft, faderLength;
-    determineFaderBoundaries(sensorSplit, faderLeft, faderLength);
-    paintCCFaderDisplayRow(sensorSplit, sensorRow, Split[sensorSplit].colorLowRow, Split[sensorSplit].ccForLowRow, faderLeft, faderLength);
+    paintLowRowCCX(sensorSplit);
   }
 
-  // send out the MIDI CC
-  preSendControlChange(sensorSplit, Split[sensorSplit].ccForLowRow, x, false);
+  sendFaderValue(Split[sensorSplit].ccForLowRow, x);
+
+  if(Global.splitActive) {
+    for(byte split=0; split<NUMSPLITS; split++) {
+      if(Split[split].ccFaders) {
+        paintFadersForSplitMatchingCC(split, Split[sensorSplit].ccForLowRow);
+      }
+    }
+  }
 }
 
 void sendLowRowCCXYZ(unsigned short x, short y, short z) {
@@ -403,16 +413,14 @@ void lowRowStop() {
               lowRowCCXActive[sensorSplit] = false;
               if (Split[sensorSplit].lowRowCCXBehavior == lowRowCCHold) {
                 // reset CC for lowRowX since no low row touch is active anymore
-                preSendControlChange(sensorSplit, Split[sensorSplit].ccForLowRow, 0, false);
+                sendLowRowCCX(0);
               }
               break;
             case lowRowCCXYZ:
               lowRowCCXYZActive[sensorSplit] = false;
               if (Split[sensorSplit].lowRowCCXYZBehavior == lowRowCCHold) {
                 // reset CCs for lowRowXYZ since no low row touch is active anymore
-                preSendControlChange(sensorSplit, Split[sensorSplit].ccForLowRowX, 0, false);
-                preSendControlChange(sensorSplit, Split[sensorSplit].ccForLowRowY, 0, false);
-                preSendControlChange(sensorSplit, Split[sensorSplit].ccForLowRowZ, 0, false);
+                sendLowRowCCXYZ(0, 0, 0);
               }
               break;
           }

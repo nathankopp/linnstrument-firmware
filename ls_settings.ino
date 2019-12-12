@@ -207,6 +207,16 @@ void loadSettings() {
     configOffset = sizeof(Configuration);
   }
   memcpy(&config, dueFlashStorage.readAddress(SETTINGS_OFFSET+sizeof(unsigned long)+configOffset), sizeof(Configuration));
+
+  for(int split=0; split<NUMSPLITS; split++) {
+    for(int row=0; NUMROWS<8; row++) {
+      ccFaderValues[split][Split[split].ccForFader[row]] = Split[split].valForFader[row];  
+    }
+
+    // TODO: also search through other splits that have matching MIDI channel selections
+    if(Split[split].curveForZ == cubicCurve) ccFaderValues[split][Split[split].customCCForZ] = Split[split].ctrForZ;
+    if(Split[split].relativeY || Split[split].curveForY == cubicCurve) ccFaderValues[split][Split[split].customCCForY] = Split[split].ctrForY;
+  }
 }
 
 void writeInitialProjectSettings() {
@@ -1687,6 +1697,8 @@ void handlePerSplitSettingRelease() {
             if (Split[Global.currentPerSplit].ccFaders) {
               Split[Global.currentPerSplit].arpeggiator = false;
               Split[Global.currentPerSplit].strum = false;
+              Split[Global.currentPerSplit].midiMode = oneChannel;
+              Split[Global.currentPerSplit].midiChanMainEnabled = true;
               setSplitSequencerEnabled(Global.currentPerSplit, false);
             }
           }

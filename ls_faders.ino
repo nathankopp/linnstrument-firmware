@@ -61,17 +61,70 @@ void handleFaderTouch(boolean newVelocity, byte faderLeft, byte faderLength) {
 
     if (value >= 0) {
       ccFaderValues[sensorSplit][ccForFader] = value;
-      preSendControlChange(sensorSplit, ccForFader, value, false);
-      paintCCFaderDisplayRow(sensorSplit, sensorRow, faderLeft, faderLength);
-      // update other faders with the same CC number
-      for (byte f = 0; f < 8; ++f) {
-        if (f != sensorRow && Split[sensorSplit].ccForFader[f] == ccForFader) {
-          performContinuousTasks();
-          paintCCFaderDisplayRow(sensorSplit, f, faderLeft, faderLength);
+      Split[sensorSplit].valForFader[sensorRow] = value;
+      sendFaderValue(ccForFader, value);
+      paintFadersForSplitMatchingCC(sensorSplit, ccForFader, faderLeft, faderLength);
+      if(Global.splitActive) {
+        // update low row and all faders with this CC number other visible splits, since they might have changed
+        for(byte split = 0; split<NUMSPLITS; split++) {
+          if(split != sensorSplit) {
+            if(Split[split].ccFaders) {
+              paintFadersForSplitMatchingCC(split, ccForFader);
+            }
+            if (Split[split].lowRowCCXBehavior == lowRowCCFader && Split[split].ccForLowRow==ccForFader) {
+              paintLowRowCCX(split);
+            }
+            
+          }
         }
       }
     }
   }
+}
+
+void paintFadersForSplitMatchingCC(byte split, byte ccForFader) {
+  byte faderLeft;
+  byte faderLength;
+  determineFaderBoundaries(split, faderLeft, faderLength);
+  paintFadersForSplitMatchingCC(split, ccForFader, faderLeft, faderLength);
+}
+
+void paintFadersForSplitMatchingCC(byte split, byte ccForFader, byte faderLeft, byte faderLength) {
+  for (byte f = 0; f < 8; ++f) {
+    if (Split[split].ccForFader[f] == ccForFader) {
+      performContinuousTasks();
+      paintCCFaderDisplayRow(split, f, faderLeft, faderLength);
+    }
+  }
+}
+
+void sendFaderValue(unsigned short ccForFader, short value)
+{
+  for(byte split = 0; split<NUMSPLITS; split++) {
+    // TODO: check for all matches in Split[split].midiChanSet[]
+    if ( (Split[split].midiChanMainEnabled && Split[split].midiChanMain == Split[sensorSplit].midiChanMain) ||
+         (Split[split].midiChanSet[Split[sensorSplit].midiChanMain])  )
+    {
+      if(ccForFader == Split[split].customCCForZ)
+      {
+        Split[split].ctrForZ = value;
+      }
+
+      if(ccForFader == Split[split].customCCForY)
+      {
+        Split[split].ctrForY = value;
+      }
+      
+      ccFaderValues[split][ccForFader] = value;
+      for (byte f = 0; f < 8; ++f) {
+        if (Split[split].ccForFader[f] == ccForFader) {
+          Split[split].valForFader[f] = value;
+        }
+      }
+    }
+  }
+  
+  preSendControlChange(sensorSplit, ccForFader, value, false);
 }
 
 void handleFaderRelease() {
