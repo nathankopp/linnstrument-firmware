@@ -293,6 +293,13 @@ VelocityState calcVelocity(unsigned short z) {
 
       sensorCell->velocity = calcPreferredVelocity(slope);
 
+      // Sometimes the linear regression gives too small of a velocity.  This is probably caused by
+      // inconsistency regarding the start of sampling this cell relative to when first impact actually
+      // occured. To improve consistency in note velocity values, here we ensure that the final note
+      // velocity is at minimum equal to the current basic pressure-based velocity (found in the velocityZ variable).
+      byte alternateVelocity = calcPreferredVelocity(PRESSUREZ_TO_VELOCITYZ(sensorCell->velocityZ));
+      if(sensorCell->velocity < alternateVelocity) sensorCell->velocity = alternateVelocity;
+
       return velocityNew;
     }
     else {
@@ -527,6 +534,7 @@ inline void TouchInfo::refreshZ() {
     else {
       usablePressureZ = constrain(usableZ, 1, sensorRangePressure);
     }
+    
     percentRawZ = (constrain(usableZ, 0, sensorRange) * 100) / sensorRange;
 
     int32_t fxd_usableVelocityZ = FXD_MUL(FXD_FROM_INT(usableVelocityZ), FXD_DIV(FXD_FROM_INT(MAX_SENSOR_RANGE_Z), FXD_FROM_INT(sensorRangeVelocity)));

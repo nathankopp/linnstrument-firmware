@@ -7,6 +7,10 @@ These routines handle the processing of new touch events, continuous updates of 
 released touch events
 **************************************************************************************************/
 
+#define VELOCITYZ_TO_PRESSUREZ(x) ((x)*4/5)
+#define PRESSUREZ_TO_VELOCITYZ(x) ((x)*5/4)
+
+
 void cellTouched(TouchState state) {
   cellTouched(sensorCol, sensorRow, state);
 };
@@ -115,6 +119,7 @@ void transferFromSameRowCell(byte col) {
   sensorCell->fxdPrevPressure = fromCell->fxdPrevPressure;
   sensorCell->fxdPrevTimbre = fromCell->fxdPrevTimbre;
   sensorCell->velocity = fromCell->velocity;
+  sensorCell->noteInitialVelocity = fromCell->noteInitialVelocity;
   sensorCell->vcount = fromCell->vcount;
   noteTouchMapping[sensorSplit].changeCell(sensorCell->note, sensorCell->channel, sensorCol, sensorRow);
 
@@ -136,6 +141,7 @@ void transferFromSameRowCell(byte col) {
   fromCell->fxdPrevPressure = 0;
   fromCell->fxdPrevTimbre = FXD_CONST_255;
   fromCell->velocity = 0;
+  fromCell->noteInitialVelocity = 0;
   // do not reset vcount!
 
   signed char channel = sensorCell->channel;
@@ -164,6 +170,7 @@ void transferToSameRowCell(byte col) {
   toCell->fxdPrevPressure = sensorCell->fxdPrevPressure;
   toCell->fxdPrevTimbre = sensorCell->fxdPrevTimbre;
   toCell->velocity = sensorCell->velocity;
+  toCell->noteInitialVelocity = sensorCell->noteInitialVelocity;
   toCell->vcount = sensorCell->vcount;
   noteTouchMapping[sensorSplit].changeCell(toCell->note, toCell->channel, col, sensorRow);
 
@@ -185,6 +192,7 @@ void transferToSameRowCell(byte col) {
   sensorCell->fxdPrevPressure = 0;
   sensorCell->fxdPrevTimbre = FXD_CONST_255;
   sensorCell->velocity = 0;
+  sensorCell->noteInitialVelocity = 0;
   // do not reset vcount!
 
   signed char channel = toCell->channel;
@@ -799,7 +807,7 @@ boolean handleXYZupdate() {
 
   // this cell corresponds to a playing note
   if (newVelocity) {
-    sensorCell->lastTouch = millis();
+    sensorCell->lastTouch = lastTouchMoment;
     sensorCell->lastMovedX = 0;
     sensorCell->lastValueX = INVALID_DATA;
     sensorCell->shouldRefreshX = true;
@@ -1016,7 +1024,7 @@ boolean handleXYZupdate() {
           handleStrummedRowChange(true, 0);
         }
         else {
-          sendNewNote();
+          sendNewNote(valueZHi, valueZ);
         }
 
         // when the legato switch is pressed and this is the only new touch in the split,
@@ -1222,13 +1230,15 @@ void prepareNewNote(signed char notenum) {
   latestNoteNumberForAutoOctave = notenum;
 }
 
-void sendNewNote() {
+void sendNewNote(unsigned short valueZHi, byte valueZ) {
   if (!isArpeggiatorEnabled(sensorSplit)) {
     // if we've switched from pitch X enabled to pitch X disabled and the last
     // pitch bend value was not neutral, reset it first to prevent skewed pitches
     if (!Split[sensorSplit].sendX && hasPreviousPitchBendValue(sensorCell->channel)) {
       preSendPitchBend(sensorSplit, 0, sensorCell->channel);
     }
+
+    sensorCell->noteInitialVelocity = sensorCell->velocity;
 
     // reset pressure to 0 before sending the note, but only for the afterTouch curve
     if (Split[sensorSplit].sendZ && isZExpressiveCell()) {
@@ -1237,6 +1247,11 @@ void sendNewNote() {
         preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel);
       }
       else {
+        unsigned short valueZHiFromVelocity = VELOCITYZ_TO_PRESSUREZ(sensorCell->noteInitialVelocity*1016/127);
+        if(valueZHiFromVelocity > valueZHi) {
+          valueZHi = valueZHiFromVelocity;
+          valueZ = scale1016to127(valueZHi, false);
+        }
         preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel);
       }
     }
@@ -1246,6 +1261,8 @@ void sendNewNote() {
     if (hasActiveMidiNote(sensorSplit, sensorCell->note, sensorCell->channel)) {
       midiSendNoteOff(sensorSplit, sensorCell->note, sensorCell->channel);
     }
+
+    sensorCell->previousValueZHi = valueZHi;
 
     // send the note on
     midiSendNoteOn(sensorSplit, sensorCell->note, sensorCell->velocity, sensorCell->channel);
@@ -1321,10 +1338,24 @@ unsigned short handleZExpression() {
 
   // the faster we move the slower the slew rate becomes,
   // if we're holding still the pressure changes are almost instant, if we're moving faster they are averaged out
-  int32_t slewRate = sensorCell->fxdRateX;
+  int32_t slewRate = sensorCell->fxdRateX<<1;
 
   // adapt the slew rate based on the rate of change on the pressure, the smaller the change, the higher the slew rate
-  slewRate += FXD_CONST_2 - FXD_DIV(abs(FXD_FROM_INT(preferredPressure) - sensorCell->fxdPrevPressure), FXD_FROM_INT(508));
+  // slewRate += FXD_CONST_1 - FXD_DIV(abs(FXD_FROM_INT(preferredPressure) - sensorCell->fxdPrevPressure), FXD_CONST_508);
+
+  // lower pressures have more noise, and need more smoothing
+  if(preferredPressure<508) {
+    slewRate += FXD_CONST_20 + FXD_DIV(sensorCell->fxdPrevPressure - FXD_FROM_INT(preferredPressure), FXD_CONST_10);
+  }
+  else {
+    // decreasing has has a slower slew rate, especially for release
+    if(FXD_FROM_INT(preferredPressure) < sensorCell->fxdPrevPressure) {
+      slewRate += FXD_DIV(sensorCell->fxdPrevPressure - FXD_FROM_INT(preferredPressure), FXD_CONST_8);
+    }
+    else {
+      slewRate += FXD_DIV(FXD_FROM_INT(preferredPressure) - sensorCell->fxdPrevPressure, FXD_CONST_100);
+    }
+  }
 
   if (slewRate > FXD_CONST_1) {
     // we also keep track of the previous pressure on the cell and average it out with
@@ -1527,7 +1558,7 @@ short handleYExpression() {
 
   // the faster we move horizontally, the slower the slew rate becomes,
   // if we're holding still the timbre changes are almost instant, if we're moving faster they are averaged out
-  int32_t slewRate = FXD_CONST_1 + sensorCell->fxdRateX;
+  int32_t slewRate = FXD_CONST_20 + sensorCell->fxdRateX*2;
 
   int32_t fxdAveragedTimbre;
   if (sensorCell->fxdPrevTimbre == FXD_CONST_255) {

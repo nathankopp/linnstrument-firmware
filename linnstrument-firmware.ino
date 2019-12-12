@@ -339,28 +339,41 @@ struct __attribute__ ((packed)) TouchInfo {
   signed char octaveOffset:8;                // the octave offset when the note started, since this can change during playing
   byte phantomCol1:5;                        // stores the col 1 of a rectangle that possibly has a phantom touch
   byte phantomRow1:3;                        // stores the row 1 of a rectangle that possibly has a phantom touch
+  
   byte phantomCol2:5;                        // stores the col 2 of a rectangle that possibly has a phantom touch
   byte phantomRow2:3;                        // stores the row 2 of a rectangle that possibly has a phantom touch
+  
   signed char initialY:8;                    // initial Y value of each cell, -1 meaning it's unassigned
+  
   byte currentCalibratedY:7;                 // last calibrated Y value of each cell
   boolean shouldRefreshY:1;                  // indicate whether it's necessary to refresh Y
+  
   unsigned short currentRawY:12;             // last raw Y value of each cell
   unsigned short currentRawZ:12;             // the raw Z value
+  
   byte percentRawZ:7;                        // percentage of Z compared to the raw offset and range
   boolean shouldRefreshX:1;                  // indicate whether it's necessary to refresh X
+  
   TouchState touched:2;                      // touch status of all sensor cells
   byte vcount:4;                             // the number of times the pressure was measured to obtain a velocity
   boolean slideTransfer:1;                   // indicates whether this touch is part of a slide transfer
   boolean rogueSweepX:1;                     // indicates whether the last X position is a rogue sweep
+  
   byte pendingReleaseCount:4;                // counter before which the note release will be effective
   boolean featherTouch:1;                    // indicates whether this is a feather touch
   unsigned short pressureZ:10;               // the Z value with pressure sensitivity
   unsigned short previousRawZ:12;            // the previous raw Z value
-int :4;
+int :5;
+
   boolean phantomSet:1;                      // indicates whether phantom touch coordinates are set
   byte velocity:7;                           // velocity from 0 to 127
+  
   boolean shouldRefreshZ:1;                  // indicate whether it's necessary to refresh Z
   byte velocityZ:7;                          // the Z value with velocity sensitivity
+
+  byte noteInitialVelocity:8;
+  byte noteInitialMaxValueZHi:10;
+  byte previousValueZHi:10;
 };
 TouchInfo touchInfo[MAXCOLS][MAXROWS];       // store as much touch information instances as there are cells
 

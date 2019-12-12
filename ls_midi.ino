@@ -1973,7 +1973,43 @@ void preResetLastLoudness(byte split, byte note, byte channel) {
 
 // Called to send Z message. Depending on midiMode, sends different types of Channel Pressure or Poly Pressure message.
 void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, byte note, byte channel) {
-  pressureValueHi = applyLimits1016(pressureValueHi, Split[split].minForZ, Split[split].maxForZ, fxdLimitsForZRatio[split]);
+
+  if (Split[sensorSplit].curveForZ != aftertouchCurve) {
+    // SPECIAL HANDLING FOR ATTACK
+    // Except for the aftertouch curve, for the first 100ms we only keep the maximum pressure, if that or the previous is over 50%.
+    // (The purpose of this is to ignore the finger's bounce-back from the hard surface)
+    // For the next 200ms, we interpolate between that stored highest pressure from the first 100ms to the current pressure,
+    // to avoid a sharp jump.
+    // After 300ms, we will revert to the original logic of using valueZ directly.
+
+#define ATTACK_MS 100
+#define DECAY_MS 200
+
+    unsigned long touchedDurationMs =  lastTouchMoment - sensorCell->lastTouch;
+    if(touchedDurationMs<ATTACK_MS) {
+      if(sensorCell->noteInitialMaxValueZHi >= 508) {
+        // keep the max, if the max is 50% or higher
+        if(pressureValueHi < sensorCell->previousValueZHi) {
+          pressureValueHi = sensorCell->previousValueZHi;
+          pressureValueLo = scale1016to127(pressureValueHi, true);
+        }
+      }
+      if(pressureValueHi > sensorCell->noteInitialMaxValueZHi) {
+        sensorCell->noteInitialMaxValueZHi = pressureValueHi;
+      }
+    }
+    else if(touchedDurationMs<(ATTACK_MS+DECAY_MS)) {
+      // interpolate from velocity-based volume to actual pressure volume over a period of DECAY_MS
+      // TODO, make this DECAY_MS time into a configurable setting
+      if (sensorCell->noteInitialMaxValueZHi >= 508 && sensorCell->noteInitialMaxValueZHi > pressureValueHi)
+      {
+        pressureValueHi = (pressureValueHi*(touchedDurationMs-ATTACK_MS) + sensorCell->noteInitialMaxValueZHi*((ATTACK_MS+DECAY_MS)-touchedDurationMs))/DECAY_MS;
+        pressureValueLo = scale1016to127(pressureValueHi, true);
+      }
+    }
+  }
+  sensorCell->previousValueZHi = pressureValueHi;
+
 
   // Handle the curves
   
