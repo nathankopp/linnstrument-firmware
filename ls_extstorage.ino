@@ -739,7 +739,7 @@ struct SplitSettingsV6 {
   unsigned short minForY;                 // 0-127
   unsigned short maxForY;                 // 0-127
   boolean relativeY;                      // true when Y should be sent relative to the initial touch, false when it's absolute
-  unsigned short initialRelativeY;        // 0-127
+  unsigned short ctrForY;                 // 0-127
   LoudnessExpression expressionForZ;      // the expression that should be used for loudness
   unsigned short customCCForZ;            // 0-127
   unsigned short minForZ;                 // 0-127
@@ -790,6 +790,8 @@ struct ConfigurationV14 {
   PresetSettingsV10 preset[4];
   SequencerProject project;
 };
+
+
 /*************************************************************************************************/
 
 boolean upgradeConfigurationSettings(int32_t confSize, byte* buff2) {
@@ -1989,7 +1991,7 @@ void copySplitSettingsV6(void* target, void* source) {
   t->minForY = s->minForY;
   t->maxForY = s->maxForY;
   t->relativeY = s->relativeY;
-  t->initialRelativeY = s->initialRelativeY;
+  t->ctrForY = s->ctrForY;
   t->expressionForZ = s->expressionForZ;
   t->customCCForZ = s->customCCForZ;
   t->minForZ = s->minForZ;

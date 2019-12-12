@@ -553,12 +553,15 @@ void initializePresetSettings() {
         p.split[s].maxForY = 127;
         p.split[s].customCCForY = 74;
         p.split[s].relativeY = false;
-        p.split[s].initialRelativeY = 64;
+        p.split[s].ctrForY = 64;
+        p.split[s].curveForY = cubicCurve;
         p.split[s].expressionForZ = loudnessPolyPressure;
         p.split[s].minForZ = 0;
+        p.split[s].ctrForZ = 64;
         p.split[s].maxForZ = 127;
         p.split[s].customCCForZ = 11;
         p.split[s].ccForZ14Bit = false;
+        p.split[s].curveForZ = cubicCurve;
         memcpy(&p.split[s].ccForFader, ccFaderDefaults, sizeof(unsigned short)*8);
         p.split[s].colorAccent = COLOR_CYAN;
         p.split[s].colorLowRow = COLOR_YELLOW;
@@ -1274,6 +1277,12 @@ void handlePerSplitSettingNewTouch() {
         case 4:
           // handled in release
           break;
+        case 3:
+          // toggle through the alternative curves
+          if(Split[Global.currentPerSplit].curveForY == linearCurve) Split[Global.currentPerSplit].curveForY = cubicCurve;
+          else if(Split[Global.currentPerSplit].curveForY == cubicCurve) Split[Global.currentPerSplit].curveForY = aftertouchCurve;
+          else Split[Global.currentPerSplit].curveForY = linearCurve;
+          break;
       }
       break;
 
@@ -1291,6 +1300,12 @@ void handlePerSplitSettingNewTouch() {
           break;
         case 4:
           Split[Global.currentPerSplit].expressionForZ = loudnessCC11;
+          break;
+        case 3:
+          // toggle through the alternative curves
+          if(Split[Global.currentPerSplit].curveForZ == linearCurve) Split[Global.currentPerSplit].curveForZ = cubicCurve;
+          else if(Split[Global.currentPerSplit].curveForZ == cubicCurve) Split[Global.currentPerSplit].curveForZ = aftertouchCurve;
+          else Split[Global.currentPerSplit].curveForZ = linearCurve;
           break;
       }
       break;
@@ -1824,14 +1839,17 @@ void handleBendRangeRelease() {
 
 void handleLimitsForYNewTouch() {
   switch (limitsForYConfigState) {
-    case 1:
+    case 2:
       handleNumericDataNewTouchCol(Split[Global.currentPerSplit].minForY, 0, 127, false);
+      break;
+    case 1:
+      handleNumericDataNewTouchCol(Split[Global.currentPerSplit].ctrForY, 0, 127, false);
       break;
     case 0:
       handleNumericDataNewTouchCol(Split[Global.currentPerSplit].maxForY, 0, 127, false);
       break;
   }
-  handleNumericDataNewTouchRow(limitsForYConfigState, 0, 1);
+  handleNumericDataNewTouchRow(limitsForYConfigState, 0, 2);
 }
 
 void handleLimitsForYRelease() {
@@ -1862,7 +1880,7 @@ void handleCCForYRelease() {
 }
 
 void handleInitialForRelativeYNewTouch() {
-  handleNumericDataNewTouchCol(Split[Global.currentPerSplit].initialRelativeY, 0, 127, false);
+  handleNumericDataNewTouchCol(Split[Global.currentPerSplit].ctrForY, 0, 127, false);
 }
 
 void handleInitialForRelativeYRelease() {
@@ -1871,8 +1889,11 @@ void handleInitialForRelativeYRelease() {
 
 void handleLimitsForZNewTouch() {
   switch (limitsForZConfigState) {
-    case 2:
+    case 3:
       handleNumericDataNewTouchCol(Split[Global.currentPerSplit].minForZ, 0, 127, false);
+      break;
+    case 2:
+      handleNumericDataNewTouchCol(Split[Global.currentPerSplit].ctrForZ, 0, 127, false);
       break;
     case 1:
       handleNumericDataNewTouchCol(Split[Global.currentPerSplit].maxForZ, 0, 127, false);
@@ -1881,7 +1902,7 @@ void handleLimitsForZNewTouch() {
       handleNumericDataNewTouchCol(Split[Global.currentPerSplit].ccForZ14Bit);
       break;
   }
-  handleNumericDataNewTouchRow(limitsForZConfigState, 0, 2);
+  handleNumericDataNewTouchRow(limitsForZConfigState, 0, 3);
 }
 
 void handleLimitsForZRelease() {

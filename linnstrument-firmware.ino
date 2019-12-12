@@ -585,6 +585,12 @@ enum LoudnessExpression {
   loudnessCC11
 };
 
+enum CurveType {
+  linearCurve,
+  cubicCurve,
+  aftertouchCurve
+};
+
 enum SequencerView {
   sequencerNotes,
   sequencerScales,
@@ -618,12 +624,15 @@ struct SplitSettings {
   unsigned short minForY;                 // 0-127
   unsigned short maxForY;                 // 0-127
   boolean relativeY;                      // true when Y should be sent relative to the initial touch, false when it's absolute
-  unsigned short initialRelativeY;        // 0-127
+  unsigned short ctrForY;                 // 0-127
+  CurveType curveForY;
   LoudnessExpression expressionForZ;      // the expression that should be used for loudness
   unsigned short customCCForZ;            // 0-127
   unsigned short minForZ;                 // 0-127
+  unsigned short ctrForZ;                 // 0-127
   unsigned short maxForZ;                 // 0-127
   boolean ccForZ14Bit;                    // true when 14-bit messages should be sent when Z CC is between 0-31, false when only 7-bit messages should be sent
+  CurveType curveForZ;
   unsigned short ccForFader[8];           // each fader can control a CC number ranging from 0-128 (with 128 being placeholder for ChannelPressure)
   byte colorMain;                         // color for non-accented cells
   byte colorAccent;                       // color for accented cells
@@ -945,11 +954,17 @@ inline int32_t FXD4_DIV(int32_t a, int32_t b) {
 const int32_t FXD_CONST_1 = FXD_FROM_INT(1);
 const int32_t FXD_CONST_2 = FXD_FROM_INT(2);
 const int32_t FXD_CONST_3 = FXD_FROM_INT(3);
+const int32_t FXD_CONST_5 = FXD_FROM_INT(5);
+const int32_t FXD_CONST_8 = FXD_FROM_INT(8);
+const int32_t FXD_CONST_10 = FXD_FROM_INT(10);
+const int32_t FXD_CONST_20 = FXD_FROM_INT(20);
 const int32_t FXD_CONST_50 = FXD_FROM_INT(50);
+const int32_t FXD_CONST_64 = FXD_FROM_INT(64);
 const int32_t FXD_CONST_99 = FXD_FROM_INT(99);
 const int32_t FXD_CONST_100 = FXD_FROM_INT(100);
 const int32_t FXD_CONST_127 = FXD_FROM_INT(127);
 const int32_t FXD_CONST_255 = FXD_FROM_INT(255);
+const int32_t FXD_CONST_508 = FXD_FROM_INT(508);
 const int32_t FXD_CONST_1016 = FXD_FROM_INT(1016);
 
 const int CALX_VALUE_MARGIN = 85;                         // 4095 / 48
@@ -1040,8 +1055,8 @@ int32_t fxdLimitsForZRatio[NUMSPLITS];              // the ratio to convert the 
 int32_t fxdMinVelOffset;                            // the offset to apply to the velocity values
 int32_t fxdVelRatio;                                // the ratio to convert the full range of velocity into the range applied by the limits
 
-byte limitsForYConfigState = 1;                     // the last state of the Y value limit configuration, this counts down to go to further pages
-byte limitsForZConfigState = 2;                     // the last state of the Z value limit configuration, this counts down to go to further pages
+byte limitsForYConfigState = 2;                     // the last state of the Y value limit configuration, this counts down to go to further pages
+byte limitsForZConfigState = 3;                     // the last state of the Z value limit configuration, this counts down to go to further pages
 byte limitsForVelocityConfigState = 1;              // the last state of the velocity value limit configuration, this counts down to go to further pages
 byte lowRowCCXConfigState = 1;                      // the last state of the advanced low row CCX configuration, this counts down to go to further pages
 byte lowRowCCXYZConfigState = 3;                    // the last state of the advanced low row CCXYZ configuration, this counts down to go to further pages

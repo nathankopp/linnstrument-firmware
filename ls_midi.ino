@@ -864,7 +864,7 @@ void receivedNrpn(int parameter, int value, int channel) {
     // Split Initial For Relative Y
     case 59:
       if (inRange(value, 0, 127)) {
-        Split[split].initialRelativeY = value;
+        Split[split].ctrForY = value;
       }
       break;
     // Split Channel Per Row MIDI Channel Order
@@ -1415,7 +1415,7 @@ void sendNrpnParameter(int parameter, int channel) {
       value = Split[split].ccForZ14Bit;
       break;
     case 59:
-      value = Split[split].initialRelativeY;
+      value = Split[split].ctrForY;
       break;
     case 60:
       value = Split[split].midiChanPerRowReversed;
@@ -1974,10 +1974,52 @@ void preResetLastLoudness(byte split, byte note, byte channel) {
 // Called to send Z message. Depending on midiMode, sends different types of Channel Pressure or Poly Pressure message.
 void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, byte note, byte channel) {
   pressureValueHi = applyLimits1016(pressureValueHi, Split[split].minForZ, Split[split].maxForZ, fxdLimitsForZRatio[split]);
+
+  // Handle the curves
+  
+  if (Split[sensorSplit].curveForZ == aftertouchCurve) {
+    // clip and rescale the top 25% to be the full 100%
+    // with the bottom 75% being considered zero
+    pressureValueHi = constrain(pressureValueHi-762, 0, 254)*4;
+    pressureValueLo = scale1016to127(pressureValueHi, true);
+  }
+  else if (Split[sensorSplit].curveForZ == cubicCurve) {
+    // cubic
+    // TODO: This curve could be precomuputed and stored in memory to improve speed,
+    // but it seems the microcontroller is fast enough that this is unnecessary.
+    // f(x) = (c-b)/(a^3) * (a-x)^3 + b
+    // a = center of input
+    // b = center of output
+    // c = output axis intercept (value of output when input is zero)
+    // NOTE: multiply by 8 converts 127 to 1016; a shift left by 3 bits also achieves the same result
+    if(pressureValueHi < 508) {
+      int a,b,c;
+      a = 508;
+      b = Split[split].ctrForZ << 3;
+      c = Split[split].minForZ << 3;
+      int aMinusX = a-pressureValueHi;
+      pressureValueHi = (c-b)*aMinusX/a*aMinusX/a*aMinusX/a + b;
+    }
+    else {
+      // this one is simply the same formula, but rotated around the center point
+      int a,b,c;
+      a = 508;
+      b = (127-Split[split].ctrForZ) << 3;
+      c = (127-Split[split].maxForZ) << 3;
+      int aMinusX = a-(1016-pressureValueHi);
+      pressureValueHi = 1016 - ((c-b)*aMinusX/a*aMinusX/a*aMinusX/a + b);
+    }
+    pressureValueLo = scale1016to127(pressureValueHi, true);
+  }
+  else {
+    // linearCurve
+    pressureValueHi = applyLimits1016(pressureValueHi, Split[split].minForZ, Split[split].maxForZ, fxdLimitsForZRatio[split]);
+    pressureValueLo = applyLimits(pressureValueLo, Split[split].minForZ, Split[split].maxForZ, fxdLimitsForZRatio[split]);
+ }
+  
   // scale 1016 to 16383 and fill out with the low resolution in order to reach the full range at maximum value
   pressureValueHi = (pressureValueHi * 16 + pressureValueLo) & 0x3FFF;
-  pressureValueLo = applyLimits(pressureValueLo, Split[split].minForZ, Split[split].maxForZ, fxdLimitsForZRatio[split]);
-
+ 
   switch(Split[split].expressionForZ)
   {
     case loudnessPolyPressure:
@@ -2004,6 +2046,7 @@ void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, by
         }
       }
       break;
+
   }
 }
 

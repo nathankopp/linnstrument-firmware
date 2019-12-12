@@ -1230,10 +1230,15 @@ void sendNewNote() {
       preSendPitchBend(sensorSplit, 0, sensorCell->channel);
     }
 
-    // reset pressure to 0 before sending the note, the actually pressure value will
-    // be sent right after the note on
+    // reset pressure to 0 before sending the note, but only for the afterTouch curve
     if (Split[sensorSplit].sendZ && isZExpressiveCell()) {
-      preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel);
+
+      if(Split[sensorSplit].curveForZ == aftertouchCurve) {
+        preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel);
+      }
+      else {
+        preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel);
+      }
     }
 
     // if the same channel and note is already active, send a note off first
@@ -1471,11 +1476,53 @@ short handleYExpression() {
   sensorCell->refreshY();
 
   short preferredTimbre = INVALID_DATA;
-  if (Split[sensorSplit].relativeY) {
-    preferredTimbre = constrain(Split[sensorSplit].initialRelativeY + (sensorCell->currentCalibratedY - sensorCell->initialY), 0, 127);
+
+  if(Split[sensorSplit].curveForY == cubicCurve) {
+    byte inputCenter = 63;
+    if(Split[sensorSplit].relativeY) {
+      inputCenter = sensorCell->initialY;
+      inputCenter = constrain(inputCenter, 33, 93);
+    }
+    
+    // cubic
+    // TODO: This curve could be precomuputed and stored in memory to improve speed,
+    // but it seems the microcontroller is fast enough that this is unnecessary.
+    // f(x) = (c-b)/(a^3) * (a-x)^3 + b
+    // a = center of input
+    // b = center of output
+    // c = output axis intercept (value of output when input is zero)
+    if(sensorCell->currentCalibratedY < inputCenter || inputCenter==127) {
+      int a = inputCenter;
+      int b = Split[sensorSplit].ctrForY;
+      int c = Split[sensorSplit].minForY;
+      int aMinusX = a-sensorCell->currentCalibratedY;
+      preferredTimbre = (c-b)*aMinusX/a*aMinusX/a*aMinusX/a + b;
+    }
+    else {
+      // this one is simply the same formula, but rotated around the center point
+      int a = 127-inputCenter;
+      int b = 127-Split[sensorSplit].ctrForY;
+      int c = 127-Split[sensorSplit].maxForY;
+      int aMinusX = a-(127-sensorCell->currentCalibratedY);
+      preferredTimbre = 127 - ((c-b)*aMinusX/a*aMinusX/a*aMinusX/a + b);
+    }
+    preferredTimbre = constrain(preferredTimbre, Split[sensorSplit].minForY, Split[sensorSplit].maxForY);
+    
+  }
+  else if (Split[sensorSplit].curveForY == aftertouchCurve) {
+    preferredTimbre = Split[sensorSplit].minForY + constrain(sensorCell->currentCalibratedY-100, 0, 27) * (Split[sensorSplit].maxForY - Split[sensorSplit].minForY) / 27;
+    preferredTimbre = constrain(preferredTimbre, Split[sensorSplit].minForY, Split[sensorSplit].maxForY);
+
   }
   else {
-    preferredTimbre = sensorCell->currentCalibratedY;
+    // linearCurve
+    if (Split[sensorSplit].relativeY) {
+      preferredTimbre = constrain(Split[sensorSplit].ctrForY + (sensorCell->currentCalibratedY - sensorCell->initialY), Split[sensorSplit].minForY, Split[sensorSplit].maxForY);
+    }
+    else {
+      preferredTimbre = constrain(sensorCell->currentCalibratedY, Split[sensorSplit].minForY, Split[sensorSplit].maxForY);
+    }
+
   }
 
   // the faster we move horizontally, the slower the slew rate becomes,
@@ -1714,9 +1761,11 @@ void handleTouchRelease() {
   }
   else if (sensorCell->hasNote()) {
 
-    // reset the pressure when the note is released and that setting is active
+    // reset the pressure when the note is released, but only for the afterTouch curve
     if (Split[sensorSplit].sendZ && isZExpressiveCell()) {
-      preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel);
+      if(Split[sensorSplit].curveForZ == aftertouchCurve) {
+        preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel);
+      }
     }
 
     // unregister the note <> cell mapping

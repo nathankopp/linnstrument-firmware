@@ -628,6 +628,18 @@ void paintPerSplitDisplay(byte side) {
     setLed(9, 4, getRelativeYColor(side), cellOn);
   }
 
+  switch(Split[side].curveForY) {
+    case linearCurve:
+      // row 3 LD is off
+      break;
+    case cubicCurve:
+      setLed(9, 3, Split[side].colorMain, cellOn);
+      break;
+    case aftertouchCurve:
+      setLed(9, 3, Split[side].colorAccent, cellOn);
+      break;
+  }
+
   // set Loudness/Z settings
   if (Split[side].sendZ == true)  {
     setLed(10, 7, getLimitsForZColor(side), cellOn);
@@ -642,6 +654,18 @@ void paintPerSplitDisplay(byte side) {
       break;
     case loudnessCC11:
       setLed(10, 4, getCCForZColor(side), cellOn);
+      break;
+  }
+
+  switch(Split[side].curveForZ) {
+    case linearCurve:
+      // row 3 LED is off for default linear curve
+      break;
+    case cubicCurve:
+      setLed(10, 3, Split[side].colorMain, cellOn);
+      break;
+    case aftertouchCurve:
+      setLed(10, 3, Split[side].colorAccent, cellOn);
       break;
   }
 
@@ -729,7 +753,7 @@ byte getBendRangeColor(byte side) {
 
 byte getLimitsForYColor(byte side) {
   byte color = Split[side].colorMain;
-  if (Split[side].minForY != 0 || Split[side].maxForY != 127) {
+  if (Split[side].minForY != 0 || Split[side].maxForY != 127 || Split[side].ctrForY != 64) {
     color = Split[side].colorAccent;
   }
   return color;
@@ -745,7 +769,7 @@ byte getCCForYColor(byte side) {
 
 byte getRelativeYColor(byte side) {
   byte color = Split[side].colorMain;
-  if (Split[side].initialRelativeY != 64) {
+  if (Split[side].ctrForY != 64) {
     color = Split[side].colorAccent;
   }
   return color;
@@ -753,7 +777,7 @@ byte getRelativeYColor(byte side) {
 
 byte getLimitsForZColor(byte side) {
   byte color = Split[side].colorMain;
-  if (Split[side].minForZ != 0 || Split[side].maxForZ != 127 || Split[side].ccForZ14Bit) {
+  if (Split[side].minForZ != 0 || Split[side].maxForZ != 127 || Split[side].ctrForZ != 64 || Split[side].ccForZ14Bit) {
     color = Split[side].colorAccent;
   }
   return color;
@@ -884,9 +908,13 @@ void paintLimitsForYDisplay(byte side) {
   clearDisplay();
 
   switch (limitsForYConfigState) {
-    case 1:
+    case 2:
       condfont_draw_string(0, 0, "L", Split[side].colorMain, true);
       paintSplitNumericDataDisplay(side, Split[side].minForY, 4, true);
+      break;
+    case 1:
+      condfont_draw_string(0, 0, "C", Split[side].colorMain, true);
+      paintSplitNumericDataDisplay(side, Split[side].ctrForY, 4, true);
       break;
     case 0:
       condfont_draw_string(0, 0, "H", Split[side].colorMain, true);
@@ -912,16 +940,20 @@ void paintCCForYDisplay(byte side) {
 
 void paintInitialForRelativeYDisplay(byte side) {
   clearDisplay();
-  paintSplitNumericDataDisplay(side, Split[side].initialRelativeY, 0, false);
+  paintSplitNumericDataDisplay(side, Split[side].ctrForY, 0, false);
 }
 
 void paintLimitsForZDisplay(byte side) {
   clearDisplay();
 
   switch (limitsForZConfigState) {
-    case 2:
+    case 3:
       condfont_draw_string(0, 0, "L", Split[side].colorMain, true);
       paintSplitNumericDataDisplay(side, Split[side].minForZ, 4, true);
+      break;
+    case 2:
+      condfont_draw_string(0, 0, "C", Split[side].colorMain, true);
+      paintSplitNumericDataDisplay(side, Split[side].ctrForZ, 4, true);
       break;
     case 1:
       condfont_draw_string(0, 0, "H", Split[side].colorMain, true);
