@@ -37,7 +37,8 @@ void initializeTouchAnimation() {
 }
 
 unsigned long calcTouchAnimationSpeed(byte mode, byte value7Bit) {
-  unsigned long speed = 196 - value7Bit;
+  unsigned long speed = 140 - value7Bit;
+  speed = speed * 3 / 2;
   switch (mode) {
     case playedBlinds:
     case playedCurtains:
@@ -142,8 +143,21 @@ void drawTouchedAnimation(byte col, byte row, CellDisplay disp, signed char stat
       break;
   }
 
+  if (disp != cellOff && Split[getSplitOf(col)].sendZ) {
+    switch (Split[getSplitOf(col)].playedTouchMode) {
+      case playedTargets:
+      case playedUp:
+      case playedDown:
+      case playedLeft:
+      case playedRight:
+        break;
+      default:
+        state_max = max(min(((int)cell(col, row).previousValueZHi)*state_max/1016+1,state_max),1);      
+    }
+  }
+
   if (state >= state_max) {
-    if (cell(col, row).touched == touchedCell) {
+    if (cell(col, row).touched == touchedCell || cell(col, row).touched == transferCell) {
       state = state % state_max;
     }
     else {
@@ -354,6 +368,9 @@ void drawTouchedAnimation(byte col, byte row, CellDisplay disp, signed char stat
         }
         break;
     }
+
+    highlightPossibleNoteCells(getSplitOf(col), cell(col, row).note);
+
   }
 }
 
@@ -395,7 +412,7 @@ void performAdvanceTouchAnimations(unsigned long nowMillis) {
         TouchInfo* c = &cell(col, row);
         if (c->touched == touchedCell && c->pendingReleaseCount == 0 && calcTimeDelta(nowMillis, c->lastTouch) > 100) {
           speed -= speed/3;
-          speed += calcTouchAnimationSpeed(Split[getSplitOf(col)].playedTouchMode, scale1016to127(c->pressureZ, true))/3;
+          speed += calcTouchAnimationSpeed(Split[getSplitOf(col)].playedTouchMode, scale1016to127(c->previousValueZHi, true))/3;
           touchAnimationSpeed[col][row] = speed;
         }
 

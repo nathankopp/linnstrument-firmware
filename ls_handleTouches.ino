@@ -10,6 +10,13 @@ released touch events
 #define VELOCITYZ_TO_PRESSUREZ(x) ((x)*4/5)
 #define PRESSUREZ_TO_VELOCITYZ(x) ((x)*5/4)
 
+extern int32_t colsInRowsAnimated[MAXROWS];
+extern unsigned long touchAnimationLastMoment[MAXCOLS][MAXROWS];
+extern unsigned long touchAnimationSpeed[MAXCOLS][MAXROWS];
+extern signed char touchAnimationLastState[MAXCOLS][MAXROWS];
+extern byte lastTouchAnimCol[2];
+extern byte lastTouchAnimRow[2];
+
 
 void cellTouched(TouchState state) {
   cellTouched(sensorCol, sensorRow, state);
@@ -148,6 +155,23 @@ void transferFromSameRowCell(byte col) {
   if (channel > 0 && col == focus(sensorSplit, channel).col && sensorRow == focus(sensorSplit, channel).row) {
     focus(sensorSplit, channel).col = sensorCol;
     focus(sensorSplit, channel).row = sensorRow;
+  }
+
+  if (touchAnimationLastState[col][sensorRow] != -1) {
+    drawTouchedAnimation(col, sensorRow, cellOff, touchAnimationLastState[col][sensorRow]);
+  
+    touchAnimationLastMoment[sensorCol][sensorRow] = touchAnimationLastMoment[col][sensorRow];
+    touchAnimationLastState[sensorCol][sensorRow] = touchAnimationLastState[col][sensorRow];
+    touchAnimationSpeed[sensorCol][sensorRow] = touchAnimationSpeed[col][sensorRow];
+    if(colsInRowsAnimated[sensorRow] & (int32_t)(1 << col)) colsInRowsAnimated[sensorRow] |= (int32_t)(1 << sensorCol);
+  
+    touchAnimationLastMoment[col][sensorRow] = 0;
+    touchAnimationLastState[col][sensorRow] = -1;
+    touchAnimationSpeed[col][sensorRow] = 0;
+    colsInRowsAnimated[sensorRow] &= ~(int32_t)(1 << col);
+  
+    if(lastTouchAnimCol[0]==col && lastTouchAnimRow[0]==sensorRow) lastTouchAnimCol[0] = sensorCol;
+    if(lastTouchAnimCol[1]==col && lastTouchAnimRow[1]==sensorRow) lastTouchAnimCol[1] = sensorCol;
   }
 }
 
@@ -1837,7 +1861,7 @@ void handleTouchRelease() {
         setLed(sensorCol, sensorRow, COLOR_OFF, cellOff, LED_LAYER_PLAYED);
       }
       // if no notes are active anymore, reset the highlighted cells
-      else if (Split[sensorSplit].playedTouchMode == playedSame) {
+      else if (Split[sensorSplit].playedTouchMode != playedCell) {
         // calculate the difference between the octave offset when the note was turned on and the octave offset
         // that is currently in use on the split, since the octave can change on the fly, while playing,
         // hence changing the position of notes on the surface
