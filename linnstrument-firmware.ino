@@ -372,8 +372,8 @@ int :5;
   byte velocityZ:7;                          // the Z value with velocity sensitivity
 
   byte noteInitialVelocity:8;
-  byte noteInitialMaxValueZHi:10;
-  byte previousValueZHi:10;
+  unsigned short noteInitialMaxValueZHi:10;
+  unsigned short previousValueZHi:10;
 };
 TouchInfo touchInfo[MAXCOLS][MAXROWS];       // store as much touch information instances as there are cells
 

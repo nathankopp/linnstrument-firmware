@@ -888,7 +888,7 @@ boolean handleXYZupdate() {
     sensorCell->lastValueX = valueX;
   }
 
-  short tempY = handleYExpression();;
+  short tempY = handleYExpression();
   if (tempY == 0 || tempY == 127 || sensorCell->isMeaningfulTouch()) {
     valueY = tempY;
   }
@@ -1024,7 +1024,7 @@ boolean handleXYZupdate() {
           handleStrummedRowChange(true, 0);
         }
         else {
-          sendNewNote(valueZHi, valueZ);
+          sendNewNote();
         }
 
         // when the legato switch is pressed and this is the only new touch in the split,
@@ -1033,11 +1033,13 @@ boolean handleXYZupdate() {
           noteTouchMapping[sensorSplit].releaseLatched(sensorSplit);
         }
       }
-
-      // if sensing Z is enabled...
-      // send different pressure update depending on midiMode
-      if (Split[sensorSplit].sendZ && isZExpressiveCell()) {
-        preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel);
+      else
+      {
+        // if sensing Z is enabled...
+        // send different pressure update depending on midiMode
+        if (Split[sensorSplit].sendZ && isZExpressiveCell()) {
+          preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel);
+        }
       }
 
       // after the initial velocity, new velocity values are continuously being calculated simply based
@@ -1230,31 +1232,12 @@ void prepareNewNote(signed char notenum) {
   latestNoteNumberForAutoOctave = notenum;
 }
 
-void sendNewNote(unsigned short valueZHi, byte valueZ) {
+void sendNewNote() {
   if (!isArpeggiatorEnabled(sensorSplit)) {
-    // if we've switched from pitch X enabled to pitch X disabled and the last
-    // pitch bend value was not neutral, reset it first to prevent skewed pitches
-    if (!Split[sensorSplit].sendX && hasPreviousPitchBendValue(sensorCell->channel)) {
-      preSendPitchBend(sensorSplit, 0, sensorCell->channel);
-    }
 
-    sensorCell->noteInitialVelocity = sensorCell->velocity;
-
-    // reset pressure to 0 before sending the note, but only for the afterTouch curve
-    if (Split[sensorSplit].sendZ && isZExpressiveCell()) {
-
-      if(Split[sensorSplit].curveForZ == aftertouchCurve) {
-        preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel);
-      }
-      else {
-        unsigned short valueZHiFromVelocity = VELOCITYZ_TO_PRESSUREZ(sensorCell->noteInitialVelocity*1016/127);
-        if(valueZHiFromVelocity > valueZHi) {
-          valueZHi = valueZHiFromVelocity;
-          valueZ = scale1016to127(valueZHi, false);
-        }
-        preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel);
-      }
-    }
+    // For new note, we shoud use the basic computed Z pressure. The z from the "expression" function
+    // will be affected by slewing from the value that was left over from the previous note played on this cell.
+    unsigned short valueZHi = sensorCell->pressureZ;
 
     // if the same channel and note is already active, send a note off first
     // so that the new touch properly triggers a new note
@@ -1262,7 +1245,31 @@ void sendNewNote(unsigned short valueZHi, byte valueZ) {
       midiSendNoteOff(sensorSplit, sensorCell->note, sensorCell->channel);
     }
 
+    // if we've switched from pitch X enabled to pitch X disabled and the last
+    // pitch bend value was not neutral, reset it first to prevent skewed pitches
+    if (!Split[sensorSplit].sendX && hasPreviousPitchBendValue(sensorCell->channel)) {
+      preSendPitchBend(sensorSplit, 0, sensorCell->channel);
+    }
+
+    // reset various items
+    sensorCell->noteInitialVelocity = sensorCell->velocity;
     sensorCell->previousValueZHi = valueZHi;
+    sensorCell->noteInitialMaxValueZHi = valueZHi;
+    sensorCell->fxdPrevPressure = FXD_FROM_INT(valueZHi);
+
+    // set initial pressure appropriately, based on selected curve
+    if (Split[sensorSplit].sendZ && isZExpressiveCell()) {
+
+      if(Split[sensorSplit].curveForZ == aftertouchCurve) {
+        preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel);
+      }
+      else {
+        unsigned short valueZHiFromVelocity = VELOCITYZ_TO_PRESSUREZ(sensorCell->velocity*1016/127);
+        if(valueZHiFromVelocity>508 && valueZHiFromVelocity > valueZHi) valueZHi = valueZHiFromVelocity;
+        byte valueZ = scale1016to127(valueZHi, false);
+        preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel);
+      }
+    }
 
     // send the note on
     midiSendNoteOn(sensorSplit, sensorCell->note, sensorCell->velocity, sensorCell->channel);
@@ -1353,7 +1360,14 @@ unsigned short handleZExpression() {
       slewRate += FXD_DIV(sensorCell->fxdPrevPressure - FXD_FROM_INT(preferredPressure), FXD_CONST_8);
     }
     else {
-      slewRate += FXD_DIV(FXD_FROM_INT(preferredPressure) - sensorCell->fxdPrevPressure, FXD_CONST_100);
+      // for initial attack, increasing, high-pressure, use an immediate slew rate
+      unsigned long touchedDurationMs =  lastTouchMoment - sensorCell->lastTouch;
+      if(touchedDurationMs<50) {
+        slewRate = FXD_CONST_1;
+      }
+      else {
+        slewRate += FXD_DIV(FXD_FROM_INT(preferredPressure) - sensorCell->fxdPrevPressure, FXD_CONST_100);
+      }
     }
   }
 
