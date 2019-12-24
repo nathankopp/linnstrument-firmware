@@ -916,6 +916,10 @@ boolean handleXYZupdate() {
     sensorCell->lastValueX = valueX;
   }
 
+  // for a new note, we need to reset the previous value to avoid slewing from this cell's old value
+  if(newVelocity) {
+    sensorCell->fxdPrevTimbre = FXD_CONST_255;
+  }
   short tempY = handleYExpression();
   if (tempY == 0 || tempY == 127 || sensorCell->isMeaningfulTouch()) {
     valueY = tempY;
