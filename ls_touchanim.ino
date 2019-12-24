@@ -406,14 +406,25 @@ void performAdvanceTouchAnimations(unsigned long nowMillis) {
         signed char state = touchAnimationLastState[col][row];
         unsigned long speed = touchAnimationSpeed[col][row];
 
-        // if the cell is still touched without a pending release and at least 100ms have passed since
-        // the initial touch, update the speed of the animation based on the current pressure, but apply
-        // it with a slew rate
-        TouchInfo* c = &cell(col, row);
-        if (c->touched == touchedCell && c->pendingReleaseCount == 0 && calcTimeDelta(nowMillis, c->lastTouch) > 100) {
-          speed -= speed/3;
-          speed += calcTouchAnimationSpeed(Split[getSplitOf(col)].playedTouchMode, scale1016to127(c->previousValueZHi, true))/3;
-          touchAnimationSpeed[col][row] = speed;
+        byte split = getSplitOf(col);
+        
+        if(Split[split].sendY || Split[split].sendZ) {
+
+          // if the cell is still touched without a pending release and at least 100ms have passed since
+          // the initial touch, update the speed of the animation based on the current pressure, but apply
+          // it with a slew rate
+          TouchInfo* c = &cell(col, row);
+          if (c->touched == touchedCell && c->pendingReleaseCount == 0 && calcTimeDelta(nowMillis, c->lastTouch) > 100) {
+            
+            byte val = 0;
+            if(Split[split].sendY) val = FXD_TO_INT(cell(col, row).fxdPrevTimbre);
+            else                   val = scale1016to127(c->previousValueZHi, true);
+          
+            speed -= speed/3;
+            speed += calcTouchAnimationSpeed(Split[split].playedTouchMode, val)/3;
+            touchAnimationSpeed[col][row] = speed;
+          }
+        
         }
 
         // if we exceed the time delay between each animation step, increase the state counter
