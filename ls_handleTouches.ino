@@ -1293,18 +1293,29 @@ void sendNewNote() {
     if (Split[sensorSplit].sendZ && isZExpressiveCell()) {
 
       if(Split[sensorSplit].curveForZ == aftertouchCurve) {
+        
         preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel);
+
+        // send the note on
+        midiSendNoteOn(sensorSplit, sensorCell->note, sensorCell->velocity, sensorCell->channel);
       }
       else {
         unsigned short valueZHiFromVelocity = VELOCITYZ_TO_PRESSUREZ(sensorCell->velocity*1016/127);
         if(valueZHiFromVelocity>508 && valueZHiFromVelocity > valueZHi) valueZHi = valueZHiFromVelocity;
         byte valueZ = scale1016to127(valueZHi, false);
+  
+        preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel);
+        
+        // send the note on
+        midiSendNoteOn(sensorSplit, sensorCell->note, sensorCell->velocity, sensorCell->channel);
+        
         preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel);
       }
     }
-
-    // send the note on
-    midiSendNoteOn(sensorSplit, sensorCell->note, sensorCell->velocity, sensorCell->channel);
+    else {
+      // send the note on
+      midiSendNoteOn(sensorSplit, sensorCell->note, sensorCell->velocity, sensorCell->channel);
+    }
   }
 }
 
