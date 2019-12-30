@@ -1974,7 +1974,7 @@ void preResetLastLoudness(byte split, byte note, byte channel) {
 // Called to send Z message. Depending on midiMode, sends different types of Channel Pressure or Poly Pressure message.
 void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, byte note, byte channel) {
 
-  if (Split[sensorSplit].curveForZ != aftertouchCurve) {
+  if (Split[split].curveForZ != aftertouchCurve) {
     // SPECIAL HANDLING FOR ATTACK
     // (The purpose of this is to ignore the finger's bounce-back from the hard surface)
 #define ATTACK_MS 50
@@ -2014,13 +2014,13 @@ void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, by
 
   // Handle the curves
   
-  if (Split[sensorSplit].curveForZ == aftertouchCurve) {
+  if (Split[split].curveForZ == aftertouchCurve) {
     // clip and rescale the top 25% to be the full 100%
     // with the bottom 75% being considered zero
     pressureValueHi = constrain(pressureValueHi-762, 0, 254)*4;
     pressureValueLo = scale1016to127(pressureValueHi, true);
   }
-  else if (Split[sensorSplit].curveForZ == cubicCurve) {
+  else if (Split[split].curveForZ == cubicCurve) {
     // cubic
     // TODO: This curve could be precomuputed and stored in memory to improve speed,
     // but it seems the microcontroller is fast enough that this is unnecessary.
@@ -2052,7 +2052,7 @@ void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, by
     // linearCurve
     pressureValueHi = applyLimits1016(pressureValueHi, Split[split].minForZ, Split[split].maxForZ, fxdLimitsForZRatio[split]);
     pressureValueLo = applyLimits(pressureValueLo, Split[split].minForZ, Split[split].maxForZ, fxdLimitsForZRatio[split]);
- }
+  }
   
   // scale 1016 to 16383 and fill out with the low resolution in order to reach the full range at maximum value
   pressureValueHi = (pressureValueHi * 16 + pressureValueLo) & 0x3FFF;

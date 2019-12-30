@@ -197,8 +197,8 @@ void transferToSameRowCell(byte col) {
   toCell->fxdPrevTimbre = sensorCell->fxdPrevTimbre;
   toCell->velocity = sensorCell->velocity;
   toCell->noteInitialVelocity = sensorCell->noteInitialVelocity;
-  toCell->noteInitialMaxValueZHi = fromCell->noteInitialMaxValueZHi;
-  toCell->previousValueZHi = fromCell->previousValueZHi;
+  toCell->noteInitialMaxValueZHi = sensorCell->noteInitialMaxValueZHi;
+  toCell->previousValueZHi = sensorCell->previousValueZHi;
   toCell->vcount = sensorCell->vcount;
   noteTouchMapping[sensorSplit].changeCell(toCell->note, toCell->channel, col, sensorRow);
 
