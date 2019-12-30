@@ -913,7 +913,7 @@ void paintLimitsForYDisplay(byte side) {
       paintSplitNumericDataDisplay(side, Split[side].minForY, 4, true);
       break;
     case 1:
-      condfont_draw_string(0, 0, "C", Split[side].colorMain, true);
+      condfont_draw_string(0, 0, "N", Split[side].colorMain, true);
       paintSplitNumericDataDisplay(side, Split[side].ctrForY, 4, true);
       break;
     case 0:
@@ -952,7 +952,7 @@ void paintLimitsForZDisplay(byte side) {
       paintSplitNumericDataDisplay(side, Split[side].minForZ, 4, true);
       break;
     case 2:
-      condfont_draw_string(0, 0, "C", Split[side].colorMain, true);
+      condfont_draw_string(0, 0, "N", Split[side].colorMain, true);
       paintSplitNumericDataDisplay(side, Split[side].ctrForZ, 4, true);
       break;
     case 1:
