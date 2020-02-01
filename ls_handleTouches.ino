@@ -1047,7 +1047,7 @@ boolean handleXYZupdate() {
       // X/Y expression based on the MIDI mode and the currently held down cells
       if (valueY != INVALID_DATA &&
           Split[sensorSplit].sendY && isYExpressiveCell()) {
-        preSendTimbre(sensorSplit, valueY, sensorCell->note, sensorCell->channel);
+        preSendTimbre(sensorSplit, valueY, sensorCell->note, sensorCell->channel, false);
       }
 
       // send the note on if this in a newly calculated velocity
@@ -1070,7 +1070,7 @@ boolean handleXYZupdate() {
         // if sensing Z is enabled...
         // send different pressure update depending on midiMode
         if (Split[sensorSplit].sendZ && isZExpressiveCell()) {
-          preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel);
+          preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel, true);
         }
       }
 
@@ -1120,11 +1120,11 @@ void handleStrummedOpenRow(byte split, byte velocity) {
   }
   if (Split[split].sendY) {
     preResetLastTimbre(split, virtualCell().note, virtualCell().channel);
-    preSendTimbre(split, 0, virtualCell().note, virtualCell().channel);
+    preSendTimbre(split, 0, virtualCell().note, virtualCell().channel, false);
   }
   if (Split[split].sendZ) {
     preResetLastLoudness(split, virtualCell().note, virtualCell().channel);
-    preSendLoudness(split, 0, 0, virtualCell().note, virtualCell().channel);
+    preSendLoudness(split, 0, 0, virtualCell().note, virtualCell().channel, false);
   }
 
   // send a new MIDI note
@@ -1294,7 +1294,7 @@ void sendNewNote() {
 
       if(Split[sensorSplit].curveForZ == aftertouchCurve) {
         
-        preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel);
+        preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel, false);
 
         // send the note on
         midiSendNoteOn(sensorSplit, sensorCell->note, sensorCell->velocity, sensorCell->channel);
@@ -1304,12 +1304,12 @@ void sendNewNote() {
         if(valueZHiFromVelocity>508 && valueZHiFromVelocity > valueZHi) valueZHi = valueZHiFromVelocity;
         byte valueZ = scale1016to127(valueZHi, false);
   
-        preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel);
+        preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel, true);
         
         // send the note on
         midiSendNoteOn(sensorSplit, sensorCell->note, sensorCell->velocity, sensorCell->channel);
         
-        preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel);
+        preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel, true);
       }
     }
     else {
@@ -1852,7 +1852,7 @@ void handleTouchRelease() {
     // reset the pressure when the note is released, but only for the afterTouch curve
     if (Split[sensorSplit].sendZ && isZExpressiveCell()) {
       if(Split[sensorSplit].curveForZ == aftertouchCurve) {
-        preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel);
+        preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel, false);
       }
     }
 

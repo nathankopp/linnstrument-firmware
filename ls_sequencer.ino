@@ -1886,7 +1886,7 @@ void StepEventState::sendNoteOn(StepEvent& event, byte splitNum) {
   }
 
   if (Split[split].sendY) {
-    preSendTimbre(split, event.getTimbre(), note, channel);
+    preSendTimbre(split, event.getTimbre(), note, channel, true);
   }
 
   midiSendNoteOn(split, note, event.getVelocity(), channel);  

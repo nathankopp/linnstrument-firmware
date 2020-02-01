@@ -1789,8 +1789,8 @@ void preResetMidiExpression(byte split) {
         if (Split[split].midiChanSet[ch]) {
           midiSendPitchBend(0, ch+1);
           byte note = 128; // this is invalid on purpose
-          preSendTimbre(split, 0, note, ch);
-          preSendLoudness(split, 0, 0, note, ch);
+          preSendTimbre(split, 0, note, ch, false);
+          preSendLoudness(split, 0, 0, note, ch, false);
         }
       }
       break;
@@ -1805,8 +1805,8 @@ void preResetMidiExpression(byte split) {
         }
         midiSendPitchBend(0, ch);
         byte note = 128; // this is invalid on purpose
-        preSendTimbre(split, 0, note, ch);
-        preSendLoudness(split, 0, 0, note, ch);
+        preSendTimbre(split, 0, note, ch, false);
+        preSendLoudness(split, 0, 0, note, ch, false);
       }
       break;
     }
@@ -1816,8 +1816,8 @@ void preResetMidiExpression(byte split) {
       byte ch = Split[split].midiChanMain;
       midiSendPitchBend(0, ch);
       byte note = 128; // this is invalid on purpose
-      preSendTimbre(split, 0, note, ch);
-      preSendLoudness(split, 0, 0, note, ch);
+      preSendTimbre(split, 0, note, ch, false);
+      preSendLoudness(split, 0, 0, note, ch, false);
       break;
     }
   }
@@ -1918,17 +1918,17 @@ void preResetLastTimbre(byte split, byte note, byte channel) {
 }
 
 // Called to send Y-axis movements
-void preSendTimbre(byte split, byte yValue, byte note, byte channel) {
+void preSendTimbre(byte split, byte yValue, byte note, byte channel, bool always) {
   yValue = applyLimits(yValue, Split[split].minForY, Split[split].maxForY, fxdLimitsForYRatio[split]);
 
   switch(Split[split].expressionForY)
   {
     case timbrePolyPressure:
-      midiSendPolyPressure(note, yValue, channel);
+      midiSendPolyPressure(note, yValue, channel, always);
       break;
 
     case timbreChannelPressure:
-      midiSendAfterTouch(yValue, channel);
+      midiSendAfterTouch(yValue, channel, always);
       break;
 
     default:
@@ -1947,7 +1947,7 @@ void preSendTimbre(byte split, byte yValue, byte note, byte channel) {
             (ccForY != Split[split].ccForLowRowX &&
              ccForY != Split[split].ccForLowRowY &&
              ccForY != Split[split].ccForLowRowZ))) {
-          midiSendControlChange(ccForY, yValue, channel);
+          midiSendControlChange(ccForY, yValue, channel, always);
       }
       break;
     }
@@ -1972,7 +1972,7 @@ void preResetLastLoudness(byte split, byte note, byte channel) {
 }
 
 // Called to send Z message. Depending on midiMode, sends different types of Channel Pressure or Poly Pressure message.
-void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, byte note, byte channel) {
+void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, byte note, byte channel, bool always) {
 
   if (Split[split].curveForZ != aftertouchCurve) {
     // SPECIAL HANDLING FOR ATTACK
@@ -2060,11 +2060,11 @@ void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, by
   switch(Split[split].expressionForZ)
   {
     case loudnessPolyPressure:
-      midiSendPolyPressure(note, pressureValueLo, channel);
+      midiSendPolyPressure(note, pressureValueLo, channel, always);
       break;
 
     case loudnessChannelPressure:
-      midiSendAfterTouch(pressureValueLo, channel);
+      midiSendAfterTouch(pressureValueLo, channel, always);
       break;
 
     case loudnessCC11:
@@ -2076,10 +2076,10 @@ void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, by
              Split[split].customCCForZ != Split[split].ccForLowRowY &&
              Split[split].customCCForZ != Split[split].ccForLowRowZ))) {
         if (Split[split].customCCForZ < 32 && Split[split].ccForZ14Bit) {
-          midiSendControlChange14BitMIDISpec(Split[split].customCCForZ, Split[split].customCCForZ+32, pressureValueHi, channel);
+          midiSendControlChange14BitMIDISpec(Split[split].customCCForZ, Split[split].customCCForZ+32, pressureValueHi, channel, always);
         }
         else {
-          midiSendControlChange(Split[split].customCCForZ, pressureValueLo, channel);
+          midiSendControlChange(Split[split].customCCForZ, pressureValueLo, channel, always);
         }
       }
       break;
@@ -2601,7 +2601,7 @@ void midiSendControlChange14BitUserFirmware(byte controlMsb, byte controlLsb, sh
   }
 }
 
-void midiSendControlChange14BitMIDISpec(byte controlMsb, byte controlLsb, short controlval, byte channel) {
+void midiSendControlChange14BitMIDISpec(byte controlMsb, byte controlLsb, short controlval, byte channel, bool always) {
   controlMsb = constrain(controlMsb, 0, 127);
   controlLsb = constrain(controlLsb, 0, 127);
   controlval = constrain(controlval, 0, 0x3fff);
@@ -2614,7 +2614,7 @@ void midiSendControlChange14BitMIDISpec(byte controlMsb, byte controlLsb, short 
   unsigned lsb = controlval & 0x7f;
 
   if (lastValueMidiCC[channel][controlMsb] == msb && lastValueMidiCC[channel][controlLsb] == lsb) return;
-  if (controlval != 0 &&
+  if (always!=always && controlval != 0 &&
       (calcTimeDelta(now, lastMomentMidiCC[channel][controlMsb]) <= midiDecimateRate ||
        calcTimeDelta(now, lastMomentMidiCC[channel][controlLsb]) <= midiDecimateRate)) return;
   if (Device.serialMode) {
@@ -2633,7 +2633,7 @@ void midiSendControlChange14BitMIDISpec(byte controlMsb, byte controlLsb, short 
 #endif
   }
   else {
-    if (lastValueMidiCC[channel][controlMsb] != msb) {
+    if (lastValueMidiCC[channel][controlMsb] != msb || always) {
       lastValueMidiCC[channel][controlMsb] = msb;
       lastMomentMidiCC[channel][controlMsb] = now;
       queueMidiMessage(MIDIControlChange, controlMsb, msb, channel);
@@ -2816,14 +2816,21 @@ void midiSendAfterTouch(byte value, byte channel, boolean always) {
 }
 
 void midiSendPolyPressure(byte notenum, byte value, byte channel) {
+    midiSendPolyPressure(notenum, value, channel, false);
+}
+
+void midiSendPolyPressure(byte notenum, byte value, byte channel, bool always) {
   if (notenum > 127) return;
 
   value = constrain(value, 0, 127);
   channel = constrain(channel-1, 0, 15);
 
   unsigned long now = micros();
-  if (lastValueMidiPP[channel][notenum] == value) return;
-  if (value != 0 && calcTimeDelta(now, lastMomentMidiPP[channel][notenum]) <= midiDecimateRate) return;
+  if(!always)
+  {
+    if (lastValueMidiPP[channel][notenum] == value) return;
+    if (value != 0 && calcTimeDelta(now, lastMomentMidiPP[channel][notenum]) <= midiDecimateRate) return;
+  }
   lastValueMidiPP[channel][notenum] = value;
   lastMomentMidiPP[channel][notenum] = now;
 
