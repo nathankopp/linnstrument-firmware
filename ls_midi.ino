@@ -1971,8 +1971,52 @@ void preResetLastLoudness(byte split, byte note, byte channel) {
   }
 }
 
+
+short computePressurCurve(byte split, short pressureValueHi, short weightForCubic, short weightForLinear)
+{
+  // cubic
+  // TODO: This curve could be precomuputed and stored in memory to improve speed,
+  // but it seems the microcontroller is fast enough that this is unnecessary.
+  // f(x) = (c-b)/(a^3) * (a-x)^3 + b
+  // a = center of input
+  // b = center of output
+  // c = output axis intercept (value of output when input is zero)
+  // NOTE: multiply by 8 converts 127 to 1016; a shift left by 3 bits also achieves the same result
+
+  int pressureValueHiCubic;
+  int pressureValueHiLinear;
+  
+  if(pressureValueHi < 508) {
+    int a,b,c;
+    a = 508;
+    b = Split[split].ctrForZ << 3;
+    c = Split[split].minForZ << 3;
+    int aMinusX = a-pressureValueHi;
+    
+    if(weightForCubic>0) pressureValueHiCubic = (c-b)*aMinusX/a*aMinusX/a*aMinusX/a + b;
+    if(weightForLinear>0) pressureValueHiLinear = (c-b)*aMinusX/a + b;
+  }
+  else {
+    // this one is simply the same formula, but rotated around the center point
+    int a,b,c;
+    a = 508;
+    b = (127-Split[split].ctrForZ) << 3;
+    c = (127-Split[split].maxForZ) << 3;
+    int aMinusX = a-(1016-pressureValueHi);
+    
+    if(weightForCubic>0) pressureValueHiCubic = 1016 - ((c-b)*aMinusX/a*aMinusX/a*aMinusX/a + b);
+    if(weightForLinear>0) pressureValueHiLinear = 1016 - ((c-b)*aMinusX/a + b);
+  }
+
+  if(weightForCubic<=0) return pressureValueHiLinear;
+  if(weightForLinear<=0) return pressureValueHiCubic;
+  return (pressureValueHiCubic*weightForCubic + pressureValueHiLinear*weightForLinear)/(weightForCubic+weightForLinear);
+}
+
 // Called to send Z message. Depending on midiMode, sends different types of Channel Pressure or Poly Pressure message.
 void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, byte note, byte channel, bool always) {
+
+  unsigned long touchedDurationMs;
 
   if (Split[split].curveForZ != aftertouchCurve) {
     // SPECIAL HANDLING FOR ATTACK
@@ -1980,7 +2024,7 @@ void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, by
 #define ATTACK_MS 50
 #define DECAY_MS 100
 
-    unsigned long touchedDurationMs =  lastTouchMoment - sensorCell->lastTouch;
+    touchedDurationMs =  lastTouchMoment - sensorCell->lastTouch;
     
     if(touchedDurationMs<ATTACK_MS) {
       if(pressureValueHi > sensorCell->noteInitialMaxValueZHi) {
@@ -2021,37 +2065,36 @@ void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, by
     pressureValueLo = scale1016to127(pressureValueHi, true);
   }
   else if (Split[split].curveForZ == cubicCurve) {
-    // cubic
-    // TODO: This curve could be precomuputed and stored in memory to improve speed,
-    // but it seems the microcontroller is fast enough that this is unnecessary.
-    // f(x) = (c-b)/(a^3) * (a-x)^3 + b
-    // a = center of input
-    // b = center of output
-    // c = output axis intercept (value of output when input is zero)
-    // NOTE: multiply by 8 converts 127 to 1016; a shift left by 3 bits also achieves the same result
-    if(pressureValueHi < 508) {
-      int a,b,c;
-      a = 508;
-      b = Split[split].ctrForZ << 3;
-      c = Split[split].minForZ << 3;
-      int aMinusX = a-pressureValueHi;
-      pressureValueHi = (c-b)*aMinusX/a*aMinusX/a*aMinusX/a + b;
+    short weightForCubic, weightForLinear;
+    if(sensorCell->noteInitialMaxValueZHi < 203 && pressureValueHi<508)
+    {
+      // if attack is within the bottom 20%, then use almost-linear for the bottom half
+      weightForCubic = 1;
+      weightForLinear = 9;
+    }
+    else if(touchedDurationMs>900) {
+      // after 900ms, use almost-linear
+      weightForCubic = 1;
+      weightForLinear = 9;
     }
     else {
-      // this one is simply the same formula, but rotated around the center point
-      int a,b,c;
-      a = 508;
-      b = (127-Split[split].ctrForZ) << 3;
-      c = (127-Split[split].maxForZ) << 3;
-      int aMinusX = a-(1016-pressureValueHi);
-      pressureValueHi = 1016 - ((c-b)*aMinusX/a*aMinusX/a*aMinusX/a + b);
+      // for first second, interpolate from cubic to almost-linear
+      weightForCubic = 1000-touchedDurationMs;
+      weightForLinear = touchedDurationMs;
     }
+    pressureValueHi =  computePressurCurve(split, pressureValueHi, weightForCubic, weightForLinear);
     pressureValueLo = scale1016to127(pressureValueHi, true);
   }
   else {
     // linearCurve
-    pressureValueHi = applyLimits1016(pressureValueHi, Split[split].minForZ, Split[split].maxForZ, fxdLimitsForZRatio[split]);
-    pressureValueLo = applyLimits(pressureValueLo, Split[split].minForZ, Split[split].maxForZ, fxdLimitsForZRatio[split]);
+    if(Split[split].ctrForZ==64) {
+      pressureValueHi = applyLimits1016(pressureValueHi, Split[split].minForZ, Split[split].maxForZ, fxdLimitsForZRatio[split]);
+      pressureValueLo = applyLimits(pressureValueLo, Split[split].minForZ, Split[split].maxForZ, fxdLimitsForZRatio[split]);
+    }
+    else {
+      pressureValueHi =  computePressurCurve(split, pressureValueHi, 0, 1);
+      pressureValueLo = scale1016to127(pressureValueHi, true);
+    }
   }
   
   // scale 1016 to 16383 and fill out with the low resolution in order to reach the full range at maximum value
