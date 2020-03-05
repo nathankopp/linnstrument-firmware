@@ -57,7 +57,7 @@ For any questions about this, contact Roger Linn Design at support@rogerlinndesi
 /******************************************** CONSTANTS ******************************************/
 
 const char* OSVersion = "222.";
-const char* OSVersionBuild = ".K03";
+const char* OSVersionBuild = ".K04";
 
 // SPI addresses
 #define SPI_LEDS    10               // Arduino pin for LED control over SPI
@@ -242,6 +242,7 @@ const unsigned short ccFaderDefaults[8] = {1, 2, 3, 4, 5, 6, 7, 8};
 #define VELOCITY_SCALE_LOW     43
 #define VELOCITY_SCALE_MEDIUM  41
 #define VELOCITY_SCALE_HIGH    40
+#define VELOCITY2_MAX_SAMPLES  8   // cannot be more than 63, due to 6-bit storage of vcount
 
 #define DEFAULT_MIN_VELOCITY   1    // default minimum velocity value
 #define DEFAULT_MAX_VELOCITY   127  // default maximum velocity value
@@ -268,6 +269,8 @@ byte cellCount = 0;                         // the number of the cell that's cur
 byte sensorCol = 0;                         // currently read column in touch sensor
 byte sensorRow = 0;                         // currently read row in touch sensor
 byte sensorSplit = 0;                       // the split of the currently read touch sensor
+
+int numCellsCalculatingVelocity = 0;
 
 // The most-recently touched cell within each channel of each split is said to have "focus",
 // saved as the specific column and row for the focus cell.
@@ -315,7 +318,8 @@ struct __attribute__ ((packed)) TouchInfo {
   boolean hasUsableX();                      // indicates whether the X data is usable
   void clearMusicalData();                   // clear the musical data
   void clearSensorData();                    // clears the measured sensor data
-  boolean isCalculatingVelocity();           // indicates whether the initial velocity is being calculated
+  void setCalculatingVelocity();             // tag this cell as initial velocity being calculated
+  void clearCalculatingVelocity();           // tag this cell as initial velocity NOT being calculated
   int32_t fxdInitialReferenceX();            // initial calibrated reference X value of each cell at the start of the touch
 
 #ifdef TESTING_SENSOR_DISABLE
@@ -354,26 +358,30 @@ struct __attribute__ ((packed)) TouchInfo {
   byte percentRawZ:7;                        // percentage of Z compared to the raw offset and range
   boolean shouldRefreshX:1;                  // indicate whether it's necessary to refresh X
   
+  byte vcount:6;                             // the number of times the pressure was measured to obtain a velocity
+  byte vcount2:2;                            // number of samples below max
+
   TouchState touched:2;                      // touch status of all sensor cells
-  byte vcount:4;                             // the number of times the pressure was measured to obtain a velocity
   boolean slideTransfer:1;                   // indicates whether this touch is part of a slide transfer
   boolean rogueSweepX:1;                     // indicates whether the last X position is a rogue sweep
-  
   byte pendingReleaseCount:4;                // counter before which the note release will be effective
-  boolean featherTouch:1;                    // indicates whether this is a feather touch
+
   unsigned short pressureZ:10;               // the Z value with pressure sensitivity
   unsigned short previousRawZ:12;            // the previous raw Z value
-int :5;
+  boolean featherTouch:1;                    // indicates whether this is a feather touch
+  boolean isCalculatingVelocity:1;
 
   boolean phantomSet:1;                      // indicates whether phantom touch coordinates are set
   byte velocity:7;                           // velocity from 0 to 127
   
   boolean shouldRefreshZ:1;                  // indicate whether it's necessary to refresh Z
   byte velocityZ:7;                          // the Z value with velocity sensitivity
+  byte maxVelocityZ;                         // 0..127
 
   byte noteInitialVelocity:8;
   unsigned short noteInitialMaxValueZHi:10;
   unsigned short previousValueZHi:10;
+  boolean newVelocity:1;
 };
 TouchInfo touchInfo[MAXCOLS][MAXROWS];       // store as much touch information instances as there are cells
 
@@ -1465,18 +1473,23 @@ inline void modeLoopPerformance() {
       if (sensorCell->initialX != SHRT_MIN &&                                    // check if there was movement on the cell
           abs(sensorCell->initialX - sensorCell->currentCalibratedX) > CALX_QUARTER_UNIT) {
         if (calcTimeDelta(millis(), sensorCell->lastTouch) > 70 ) {              // only release if it's later than 70ms after the touch to debounce some note starts
+          sensorCell->clearCalculatingVelocity();
+      
           handleTouchRelease();
         }
       }
       else {                                                                     // this release happened on a mostly stationary touch, reduce the debounce time
         if (calcTimeDelta(millis(), sensorCell->lastTouch) > 35 ) {              // only release if it's later than 35ms after the touch to debounce some note starts
+          sensorCell->clearCalculatingVelocity();
+          
           handleTouchRelease();
         }
       }
     }
 
+
     if (canShortCircuit) {
-      sensorCell->shouldRefreshData();                                           // immediately process this cell again without going through a full surface scan
+      nextSensorCell();
       return;
     }
   }

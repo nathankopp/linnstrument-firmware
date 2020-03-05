@@ -7,15 +7,14 @@ These routines handle the processing of new touch events, continuous updates of 
 released touch events
 **************************************************************************************************/
 
-#define VELOCITYZ_TO_PRESSUREZ(x) ((x)*4/5)
-#define PRESSUREZ_TO_VELOCITYZ(x) ((x)*5/4)
-
 extern int32_t colsInRowsAnimated[MAXROWS];
 extern unsigned long touchAnimationLastMoment[MAXCOLS][MAXROWS];
 extern unsigned long touchAnimationSpeed[MAXCOLS][MAXROWS];
 extern signed char touchAnimationLastState[MAXCOLS][MAXROWS];
 extern byte lastTouchAnimCol[2];
 extern byte lastTouchAnimRow[2];
+
+extern int numCellsCalculatingVelocity;
 
 
 void cellTouched(TouchState state) {
@@ -130,6 +129,8 @@ void transferFromSameRowCell(byte col) {
   sensorCell->noteInitialMaxValueZHi = fromCell->noteInitialMaxValueZHi;
   sensorCell->previousValueZHi = fromCell->previousValueZHi;
   sensorCell->vcount = fromCell->vcount;
+  sensorCell->vcount2 = fromCell->vcount2;
+  sensorCell->maxVelocityZ = fromCell->maxVelocityZ;
   noteTouchMapping[sensorSplit].changeCell(sensorCell->note, sensorCell->channel, sensorCol, sensorRow);
 
   fromCell->lastTouch = 0;
@@ -152,6 +153,7 @@ void transferFromSameRowCell(byte col) {
   fromCell->velocity = 0;
   fromCell->noteInitialVelocity = 0;
   // do not reset vcount!
+  // do not reset previousVelocityZ
 
   signed char channel = sensorCell->channel;
   if (channel > 0 && col == focus(sensorSplit, channel).col && sensorRow == focus(sensorSplit, channel).row) {
@@ -200,6 +202,8 @@ void transferToSameRowCell(byte col) {
   toCell->noteInitialMaxValueZHi = sensorCell->noteInitialMaxValueZHi;
   toCell->previousValueZHi = sensorCell->previousValueZHi;
   toCell->vcount = sensorCell->vcount;
+  toCell->vcount2 = sensorCell->vcount2;
+  toCell->maxVelocityZ = sensorCell->maxVelocityZ;
   noteTouchMapping[sensorSplit].changeCell(toCell->note, toCell->channel, col, sensorRow);
 
   sensorCell->lastTouch = 0;
@@ -499,7 +503,8 @@ boolean handleNewTouch() {
         else if (!isLowRow() || allowNewTouchOnLowRow()) {
           initVelocity();
           calcVelocity(sensorCell->velocityZ);
-          result = true;
+          sensorCell->setCalculatingVelocity();
+          result = false;
         }
         else {
           cellTouched(untouchedCell);
@@ -509,7 +514,8 @@ boolean handleNewTouch() {
       default:
         initVelocity();
         calcVelocity(sensorCell->velocityZ);
-        result = true;
+        sensorCell->setCalculatingVelocity();
+        result = false;
         break;
     }
   }
@@ -711,6 +717,7 @@ void handleNonPlayingTouch() {
       break;
     case displayCalibration:
       initVelocity();
+      sensorCell->clearCalculatingVelocity();
       break;
     case displayEditAudienceMessage:
       handleEditAudienceMessageNewTouch();
@@ -775,34 +782,47 @@ boolean handleXYZupdate() {
   VelocityState velState = calcVelocity(sensorCell->velocityZ);
 
   // velocity calculation works in stages, handle each one
-  boolean newVelocity = false;
   switch (velState) {
     // when the velocity is being calculated, the performance loop can be short-circuited
     case velocityCalculating:
-      return true;
+      sensorCell->setCalculatingVelocity();
+      //return true;
+      break;
 
     case velocityNew:
+      sensorCell->clearCalculatingVelocity();
+
       if (isPhantomTouchIndividual() || isPhantomTouchContextual()) {
         cellTouched(untouchedCell);
         return false;
       }
 
       // mark this as a valid new velocity and process it as such further down the method
-      newVelocity = true;
+      sensorCell->newVelocity = true;
       break;
 
     case velocityCalculated:
+      sensorCell->clearCalculatingVelocity();
+      
       // velocity has been calculated, no need to short-circuit anymore and we can continue
       // with the main touch logic
       break;
   }
+
+  // If we are calculating velocity for at least one cell, then skip all the rest of this function
+  // FOR ALL CELLS (not just the ones that are claculating velocity).  This means we don't spend
+  // time sending any messages.  This takes the place of the previous 'shortCircuit' concept
+  // so that velocity calculations are fast for quick note-on messages, while still scanning all
+  // of the pads to improve response to multiple notes being hit simultaneously.
+  if(numCellsCalculatingVelocity > 0) return true;
 
   // only continue if the active display modes require finger tracking
   if (displayMode != displayNormal &&
       displayMode != displayVolume &&
       (displayMode != displaySplitPoint || splitButtonDown)) {
     // check if this should be handled as a non-playing touch
-    if (newVelocity) {
+    if (sensorCell->newVelocity) {
+      sensorCell->newVelocity = false;
       handleNonPlayingTouch();
       performContinuousTasks();
     }
@@ -834,7 +854,7 @@ boolean handleXYZupdate() {
   }
 
   // this cell corresponds to a playing note
-  if (newVelocity) {
+  if (sensorCell->newVelocity) {
     sensorCell->lastTouch = lastTouchMoment;
     sensorCell->lastMovedX = 0;
     sensorCell->lastValueX = INVALID_DATA;
@@ -894,7 +914,8 @@ boolean handleXYZupdate() {
   }
 
   // we don't need to handle any expression in control mode
-  if (controlModeActive && !newVelocity) {
+  if (controlModeActive && !sensorCell->newVelocity) {
+    sensorCell->newVelocity = false;
     return false;
   }
 
@@ -917,7 +938,7 @@ boolean handleXYZupdate() {
   }
 
   // for a new note, we need to reset the previous value to avoid slewing from this cell's old value
-  if(newVelocity) {
+  if(sensorCell->newVelocity) {
     sensorCell->fxdPrevTimbre = FXD_CONST_255;
   }
   short tempY = handleYExpression();
@@ -929,24 +950,24 @@ boolean handleXYZupdate() {
   // update the low row state, but not for the low row cells themselves when there's a new velocity
   // this is handled in lowRowStart, and immediately calling handleLowRowState will wrongly handle the
   // low row state transitions
-  if ((!newVelocity || !isLowRow()) && !userFirmwareActive) {
-    handleLowRowState(newVelocity, valueX, valueY, valueZ);
+  if ((!sensorCell->newVelocity || !isLowRow()) && !userFirmwareActive) {
+    handleLowRowState(sensorCell->newVelocity, valueX, valueY, valueZ);
   }
 
   // the volume fader has its own operation mode
   if (displayMode == displayVolume) {
     if (sensorCell->isMeaningfulTouch()) {
-      handleVolumeNewTouch(newVelocity);
+      handleVolumeNewTouch(sensorCell->newVelocity);
     }
   }
   else if (Split[sensorSplit].ccFaders && !userFirmwareActive) {
     if (sensorCell->isMeaningfulTouch()) {
-      handleFaderTouch(newVelocity);
+      handleFaderTouch(sensorCell->newVelocity);
     }
   }
   else if (Split[Global.currentPerSplit].sequencer && !userFirmwareActive) {
     if (sensorCell->isMeaningfulTouch()) {
-      handleSequencerTouch(newVelocity);
+      handleSequencerTouch(sensorCell->newVelocity);
     }
   }
   else if (handleNotes && sensorCell->hasNote()) {
@@ -1051,7 +1072,7 @@ boolean handleXYZupdate() {
       }
 
       // send the note on if this in a newly calculated velocity
-      if (newVelocity) {
+      if (sensorCell->newVelocity) {
         if (isStrummedSplit(sensorSplit)) {
           handleStrummedRowChange(true, 0);
         }
@@ -1083,6 +1104,7 @@ boolean handleXYZupdate() {
     }
   }
 
+  sensorCell->newVelocity = false;
   return false;
 }
 
@@ -1300,8 +1322,6 @@ void sendNewNote() {
         midiSendNoteOn(sensorSplit, sensorCell->note, sensorCell->velocity, sensorCell->channel);
       }
       else {
-        unsigned short valueZHiFromVelocity = VELOCITYZ_TO_PRESSUREZ(sensorCell->velocity*1016/127);
-        if(valueZHiFromVelocity>508 && valueZHiFromVelocity > valueZHi) valueZHi = valueZHiFromVelocity;
         byte valueZ = scale1016to127(valueZHi, false);
   
         preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel, true);
@@ -1942,6 +1962,9 @@ void postTouchRelease() {
 
   // reset velocity calculations
   sensorCell->vcount = 0;
+  sensorCell->vcount2 = 0;
+  sensorCell->maxVelocityZ = 0;
+  sensorCell->newVelocity = false;
 
   sensorCell->clearSensorData();
 

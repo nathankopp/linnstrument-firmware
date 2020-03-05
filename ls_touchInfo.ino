@@ -7,6 +7,9 @@ These are the methods of the TouchInfo class, handling data related to the touch
 each individual cell.
 **************************************************************************************************/
 
+
+extern int numCellsCalculatingVelocity;
+
 /********************** the curve was generated with the following C program **********************
 #include <stdio.h>
 #include <math.h>
@@ -171,6 +174,10 @@ void initializeTouchInfo() {
       cell(col, row).lastTouch = 0;
       cell(col, row).clearSensorData();
       cell(col, row).vcount = 0;
+      cell(col, row).vcount2 = 0;
+      cell(col, row).maxVelocityZ = 0;
+      cell(col, row).isCalculatingVelocity = false;
+      cell(col, row).newVelocity = false;
       cell(col, row).velocity = 0;
       cell(col, row).note = -1;
       cell(col, row).channel = -1;
@@ -243,10 +250,46 @@ void initVelocity() {
   velSumXY2 = 0;
 
   sensorCell->vcount = 0;
+  sensorCell->vcount2 = 0;
   sensorCell->velocity = 0;
+  sensorCell->maxVelocityZ = 0;
+  sensorCell->newVelocity = false;
 }
 
 VelocityState calcVelocity(unsigned short z) {
+  if (sensorCell->vcount > VELOCITY2_MAX_SAMPLES) {
+    return velocityCalculated;
+  }
+  else if (sensorCell->vcount == VELOCITY2_MAX_SAMPLES) {
+    if(z > sensorCell->maxVelocityZ) sensorCell->maxVelocityZ = z;
+    sensorCell->velocity = calcPreferredVelocity(sensorCell->maxVelocityZ);
+    sensorCell->vcount = VELOCITY2_MAX_SAMPLES + 1;
+    return velocityNew;
+  }
+  else if (z <= sensorCell->maxVelocityZ) {
+    // if we see the same or lower value for 3 samples in a row, then consider that we've hit the peak
+    if (sensorCell->vcount2>2)
+    {
+      sensorCell->velocity = calcPreferredVelocity(sensorCell->maxVelocityZ);
+      sensorCell->vcount = VELOCITY2_MAX_SAMPLES + 1;
+      return velocityNew;
+    }
+    else {
+      sensorCell->vcount2++;
+      sensorCell->vcount++;
+      return velocityCalculating;
+    }
+  }
+  else {
+    sensorCell->vcount2 = 0;
+    sensorCell->vcount++;
+    if(z > sensorCell->maxVelocityZ) sensorCell->maxVelocityZ = z;
+    return velocityCalculating;
+  }
+}
+
+
+VelocityState calcVelocityOld(unsigned short z) {
   if (sensorCell->vcount < VELOCITY_TOTAL_SAMPLES) {
 
     // calculate the linear regression sums that are variable with the pressure
@@ -293,13 +336,6 @@ VelocityState calcVelocity(unsigned short z) {
 
       sensorCell->velocity = calcPreferredVelocity(slope);
 
-      // Sometimes the linear regression gives too small of a velocity.  This is probably caused by
-      // inconsistency regarding the start of sampling this cell relative to when first impact actually
-      // occured. To improve consistency in note velocity values, here we ensure that the final note
-      // velocity is at minimum equal to the current basic pressure-based velocity (found in the velocityZ variable).
-      byte alternateVelocity = calcPreferredVelocity(PRESSUREZ_TO_VELOCITYZ(sensorCell->velocityZ));
-      if(sensorCell->velocity < alternateVelocity) sensorCell->velocity = alternateVelocity;
-
       return velocityNew;
     }
     else {
@@ -320,8 +356,15 @@ byte calcPreferredVelocity(byte velocity) {
   }
 }
 
-boolean TouchInfo::isCalculatingVelocity() {
-  return sensorCell->vcount > 0 && sensorCell->vcount < VELOCITY_TOTAL_SAMPLES;
+void TouchInfo::setCalculatingVelocity() {
+  if(!sensorCell->isCalculatingVelocity) numCellsCalculatingVelocity++;
+  if(numCellsCalculatingVelocity > 200) numCellsCalculatingVelocity = 200;
+  sensorCell->isCalculatingVelocity = true;
+}
+void TouchInfo::clearCalculatingVelocity() {
+  if(sensorCell->isCalculatingVelocity) numCellsCalculatingVelocity--;
+  if(numCellsCalculatingVelocity < 0) numCellsCalculatingVelocity = 0;
+  sensorCell->isCalculatingVelocity = false;
 }
 
 void TouchInfo::shouldRefreshData() {
