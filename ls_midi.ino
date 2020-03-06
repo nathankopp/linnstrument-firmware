@@ -2016,45 +2016,7 @@ short computePressurCurve(byte split, short pressureValueHi, short weightForCubi
 // Called to send Z message. Depending on midiMode, sends different types of Channel Pressure or Poly Pressure message.
 void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, byte note, byte channel, bool always) {
 
-  unsigned long touchedDurationMs;
-
-  if (Split[split].curveForZ != aftertouchCurve) {
-    // SPECIAL HANDLING FOR ATTACK
-    // (The purpose of this is to ignore the finger's bounce-back from the hard surface)
-#define ATTACK_MS 50
-#define DECAY_MS 100
-
-    touchedDurationMs =  lastTouchMoment - sensorCell->lastTouch;
-    
-    if(touchedDurationMs<ATTACK_MS) {
-      if(pressureValueHi > sensorCell->noteInitialMaxValueZHi) {
-        sensorCell->noteInitialMaxValueZHi = pressureValueHi;
-      }
-    }
-
-    if(sensorCell->noteInitialMaxValueZHi > 508)
-    {
-      if(touchedDurationMs<ATTACK_MS)
-      {
-        if(pressureValueHi < sensorCell->noteInitialMaxValueZHi)
-        {
-          pressureValueHi = sensorCell->noteInitialMaxValueZHi;
-          pressureValueLo = scale1016to127(pressureValueHi, true);
-        }
-      }
-      else if(touchedDurationMs<(ATTACK_MS+DECAY_MS))
-      {
-        if(sensorCell->noteInitialMaxValueZHi > pressureValueHi)
-        {
-          pressureValueHi = (pressureValueHi*(touchedDurationMs-ATTACK_MS) + sensorCell->noteInitialMaxValueZHi*((ATTACK_MS+DECAY_MS)-touchedDurationMs))/DECAY_MS;
-          pressureValueLo = scale1016to127(pressureValueHi, true);
-        }
-      }
-    }
-  }
-  
   sensorCell->previousValueZHi = pressureValueHi;
-
 
   // Handle the curves
   
@@ -2072,15 +2034,18 @@ void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, by
       weightForCubic = 1;
       weightForLinear = 9;
     }
-    else if(touchedDurationMs>900) {
-      // after 900ms, use almost-linear
-      weightForCubic = 1;
-      weightForLinear = 9;
-    }
     else {
-      // for first second, interpolate from cubic to almost-linear
-      weightForCubic = 1000-touchedDurationMs;
-      weightForLinear = touchedDurationMs;
+      unsigned long touchedDurationMs = lastTouchMoment - sensorCell->lastTouch;
+      if(touchedDurationMs>900) {
+        // after 900ms, use almost-linear
+        weightForCubic = 1;
+        weightForLinear = 9;
+      }
+      else {
+        // for first second, interpolate from cubic to almost-linear
+        weightForCubic = 1000-touchedDurationMs;
+        weightForLinear = touchedDurationMs;
+      }
     }
     pressureValueHi =  computePressurCurve(split, pressureValueHi, weightForCubic, weightForLinear);
     pressureValueLo = scale1016to127(pressureValueHi, true);

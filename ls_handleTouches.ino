@@ -1091,7 +1091,7 @@ boolean handleXYZupdate() {
         // if sensing Z is enabled...
         // send different pressure update depending on midiMode
         if (Split[sensorSplit].sendZ && isZExpressiveCell()) {
-          preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel, true);
+          preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel, false);
         }
       }
 
@@ -1871,7 +1871,7 @@ void handleTouchRelease() {
 
     // reset the pressure when the note is released, but only for the afterTouch curve
     if (Split[sensorSplit].sendZ && isZExpressiveCell()) {
-      if(Split[sensorSplit].curveForZ == aftertouchCurve) {
+      if(Split[sensorSplit].curveForZ == aftertouchCurve || !Split[sensorSplit].releasePreserveLastZ) {
         preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel, false);
       }
     }

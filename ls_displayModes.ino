@@ -669,6 +669,10 @@ void paintPerSplitDisplay(byte side) {
       break;
   }
 
+  if(Split[side].releasePreserveLastZ) {
+    setLed(10, 2, Split[side].colorMain, cellOn);
+  }
+
   // Set "Color" lights
   setLed(11, 7, Split[side].colorMain, cellOn);
   setLed(11, 6, Split[side].colorAccent, cellOn);

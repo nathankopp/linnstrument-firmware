@@ -57,7 +57,7 @@ For any questions about this, contact Roger Linn Design at support@rogerlinndesi
 /******************************************** CONSTANTS ******************************************/
 
 const char* OSVersion = "222.";
-const char* OSVersionBuild = ".K04";
+const char* OSVersionBuild = ".K05";
 
 // SPI addresses
 #define SPI_LEDS    10               // Arduino pin for LED control over SPI
@@ -654,6 +654,7 @@ struct SplitSettings {
   unsigned short maxForZ;                 // 0-127
   boolean ccForZ14Bit;                    // true when 14-bit messages should be sent when Z CC is between 0-31, false when only 7-bit messages should be sent
   CurveType curveForZ;
+  boolean releasePreserveLastZ;           // release reset for z
   unsigned short ccForFader[8];           // each fader can control a CC number ranging from 0-128 (with 128 being placeholder for ChannelPressure)
   unsigned short valForFader[8];          // each fader has an initial value ranging from 0-127
   byte colorMain;                         // color for non-accented cells
