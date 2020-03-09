@@ -57,7 +57,7 @@ For any questions about this, contact Roger Linn Design at support@rogerlinndesi
 /******************************************** CONSTANTS ******************************************/
 
 const char* OSVersion = "222.";
-const char* OSVersionBuild = ".K05";
+const char* OSVersionBuild = ".K06";
 
 // SPI addresses
 #define SPI_LEDS    10               // Arduino pin for LED control over SPI
@@ -242,7 +242,7 @@ const unsigned short ccFaderDefaults[8] = {1, 2, 3, 4, 5, 6, 7, 8};
 #define VELOCITY_SCALE_LOW     43
 #define VELOCITY_SCALE_MEDIUM  41
 #define VELOCITY_SCALE_HIGH    40
-#define VELOCITY2_MAX_SAMPLES  8   // cannot be more than 63, due to 6-bit storage of vcount
+#define VELOCITY2_MAX_SAMPLES  6   // cannot be more than 63, due to 6-bit storage of vcount
 
 #define DEFAULT_MIN_VELOCITY   1    // default minimum velocity value
 #define DEFAULT_MAX_VELOCITY   127  // default maximum velocity value

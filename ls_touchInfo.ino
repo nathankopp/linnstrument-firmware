@@ -267,8 +267,8 @@ VelocityState calcVelocity(unsigned short z) {
     return velocityNew;
   }
   else if (z <= sensorCell->maxVelocityZ) {
-    // if we see the same or lower value for 3 samples in a row, then consider that we've hit the peak
-    if (sensorCell->vcount2>2)
+    // if we see the same or lower value for 2 samples in a row, then consider that we've hit the peak
+    if (sensorCell->vcount2>1)
     {
       sensorCell->velocity = calcPreferredVelocity(sensorCell->maxVelocityZ);
       sensorCell->vcount = VELOCITY2_MAX_SAMPLES + 1;
