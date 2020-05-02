@@ -2621,8 +2621,8 @@ void midiSendControlChange14BitMIDISpec(byte controlMsb, byte controlLsb, short 
   unsigned msb = (controlval & 0x3fff) >> 7;
   unsigned lsb = controlval & 0x7f;
 
-  if (lastValueMidiCC[channel][controlMsb] == msb && lastValueMidiCC[channel][controlLsb] == lsb) return;
-  if (always!=always && controlval != 0 &&
+  if (!always && lastValueMidiCC[channel][controlMsb] == msb && lastValueMidiCC[channel][controlLsb] == lsb) return;
+  if (!always && controlval != 0 &&
       (calcTimeDelta(now, lastMomentMidiCC[channel][controlMsb]) <= midiDecimateRate ||
        calcTimeDelta(now, lastMomentMidiCC[channel][controlLsb]) <= midiDecimateRate)) return;
   if (Device.serialMode) {
