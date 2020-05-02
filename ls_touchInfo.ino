@@ -176,7 +176,7 @@ void initializeTouchInfo() {
       cell(col, row).vcount = 0;
       cell(col, row).vcount2 = 0;
       cell(col, row).maxVelocityZ = 0;
-      cell(col, row).isCalculatingVelocity = false;
+      cell(col, row).isCalculatingVelocityVar = false;
       cell(col, row).newVelocity = false;
       cell(col, row).velocity = 0;
       cell(col, row).note = -1;
@@ -256,7 +256,7 @@ void initVelocity() {
   sensorCell->newVelocity = false;
 }
 
-VelocityState calcVelocity(unsigned short z) {
+VelocityState calcVelocityNew(unsigned short z) {
   if (sensorCell->vcount > VELOCITY2_MAX_SAMPLES) {
     return velocityCalculated;
   }
@@ -266,22 +266,7 @@ VelocityState calcVelocity(unsigned short z) {
     sensorCell->vcount = VELOCITY2_MAX_SAMPLES + 1;
     return velocityNew;
   }
-  else if (z <= sensorCell->maxVelocityZ) {
-    // if we see the same or lower value for 2 samples in a row, then consider that we've hit the peak
-    if (sensorCell->vcount2>1)
-    {
-      sensorCell->velocity = calcPreferredVelocity(sensorCell->maxVelocityZ);
-      sensorCell->vcount = VELOCITY2_MAX_SAMPLES + 1;
-      return velocityNew;
-    }
-    else {
-      sensorCell->vcount2++;
-      sensorCell->vcount++;
-      return velocityCalculating;
-    }
-  }
   else {
-    sensorCell->vcount2 = 0;
     sensorCell->vcount++;
     if(z > sensorCell->maxVelocityZ) sensorCell->maxVelocityZ = z;
     return velocityCalculating;
@@ -289,7 +274,7 @@ VelocityState calcVelocity(unsigned short z) {
 }
 
 
-VelocityState calcVelocityOld(unsigned short z) {
+VelocityState calcVelocity(unsigned short z) {
   if (sensorCell->vcount < VELOCITY_TOTAL_SAMPLES) {
 
     // calculate the linear regression sums that are variable with the pressure
@@ -356,15 +341,23 @@ byte calcPreferredVelocity(byte velocity) {
   }
 }
 
+boolean TouchInfo::isCalculatingVelocity() {
+#ifdef NEWVELOCITY
+  return sensorCell->vcount > 0 && sensorCell->vcount <= VELOCITY2_MAX_SAMPLES;
+#else
+  return sensorCell->vcount > 0 && sensorCell->vcount < VELOCITY_TOTAL_SAMPLES;
+#endif
+}
+
 void TouchInfo::setCalculatingVelocity() {
-  if(!sensorCell->isCalculatingVelocity) numCellsCalculatingVelocity++;
+  if(!sensorCell->isCalculatingVelocityVar) numCellsCalculatingVelocity++;
   if(numCellsCalculatingVelocity > 200) numCellsCalculatingVelocity = 200;
-  sensorCell->isCalculatingVelocity = true;
+  sensorCell->isCalculatingVelocityVar = true;
 }
 void TouchInfo::clearCalculatingVelocity() {
-  if(sensorCell->isCalculatingVelocity) numCellsCalculatingVelocity--;
+  if(sensorCell->isCalculatingVelocityVar) numCellsCalculatingVelocity--;
   if(numCellsCalculatingVelocity < 0) numCellsCalculatingVelocity = 0;
-  sensorCell->isCalculatingVelocity = false;
+  sensorCell->isCalculatingVelocityVar = false;
 }
 
 void TouchInfo::shouldRefreshData() {

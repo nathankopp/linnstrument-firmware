@@ -502,9 +502,14 @@ boolean handleNewTouch() {
         // however, it could be the low row and in certain situations it doesn't allow new touches
         else if (!isLowRow() || allowNewTouchOnLowRow()) {
           initVelocity();
-          calcVelocity(sensorCell->velocityZ);
+#ifdef NEWVELOCITY
+          calcVelocityNew(sensorCell->velocityZ);
           sensorCell->setCalculatingVelocity();
-          result = false;
+          result = true;
+#else
+          calcVelocity(sensorCell->velocityZ);
+          result = true;
+#endif
         }
         else {
           cellTouched(untouchedCell);
@@ -513,9 +518,14 @@ boolean handleNewTouch() {
         break;
       default:
         initVelocity();
-        calcVelocity(sensorCell->velocityZ);
+#ifdef NEWVELOCITY
+        calcVelocityNew(sensorCell->velocityZ);
         sensorCell->setCalculatingVelocity();
-        result = false;
+        result = true;
+#else
+        calcVelocity(sensorCell->velocityZ);
+        result = true;
+#endif
         break;
     }
   }
@@ -717,7 +727,9 @@ void handleNonPlayingTouch() {
       break;
     case displayCalibration:
       initVelocity();
+#ifdef NEWVELOCITY
       sensorCell->clearCalculatingVelocity();
+#endif
       break;
     case displayEditAudienceMessage:
       handleEditAudienceMessageNewTouch();
@@ -779,18 +791,27 @@ boolean handleXYZupdate() {
     }
   }
   
+#ifdef NEWVELOCITY
+  VelocityState velState = calcVelocityNew(sensorCell->velocityZ);
+#else
   VelocityState velState = calcVelocity(sensorCell->velocityZ);
+#endif
 
   // velocity calculation works in stages, handle each one
   switch (velState) {
     // when the velocity is being calculated, the performance loop can be short-circuited
     case velocityCalculating:
+#ifdef NEWVELOCITY
       sensorCell->setCalculatingVelocity();
-      //return true;
       break;
+#else
+      return true;
+#endif
 
     case velocityNew:
+#ifdef NEWVELOCITY
       sensorCell->clearCalculatingVelocity();
+#endif
 
       if (isPhantomTouchIndividual() || isPhantomTouchContextual()) {
         cellTouched(untouchedCell);
@@ -802,27 +823,33 @@ boolean handleXYZupdate() {
       break;
 
     case velocityCalculated:
+#ifdef NEWVELOCITY
       sensorCell->clearCalculatingVelocity();
+#endif
       
       // velocity has been calculated, no need to short-circuit anymore and we can continue
       // with the main touch logic
       break;
   }
 
+#ifdef NEWVELOCITY
   // If we are calculating velocity for at least one cell, then skip all the rest of this function
-  // FOR ALL CELLS (not just the ones that are claculating velocity).  This means we don't spend
-  // time sending any messages.  This takes the place of the previous 'shortCircuit' concept
+  // FOR ALL CELLS (not just the ones that are calculating velocity).  This means we don't spend
+  // time sending any messages.  This takes the place of the previous 'canShortCircuit' concept
   // so that velocity calculations are fast for quick note-on messages, while still scanning all
   // of the pads to improve response to multiple notes being hit simultaneously.
   if(numCellsCalculatingVelocity > 0) return true;
+#endif
+
+  boolean newVelocity = sensorCell->newVelocity;
+  sensorCell->newVelocity = false;
 
   // only continue if the active display modes require finger tracking
   if (displayMode != displayNormal &&
       displayMode != displayVolume &&
       (displayMode != displaySplitPoint || splitButtonDown)) {
     // check if this should be handled as a non-playing touch
-    if (sensorCell->newVelocity) {
-      sensorCell->newVelocity = false;
+    if (newVelocity) {
       handleNonPlayingTouch();
       performContinuousTasks();
     }
@@ -854,7 +881,7 @@ boolean handleXYZupdate() {
   }
 
   // this cell corresponds to a playing note
-  if (sensorCell->newVelocity) {
+  if (newVelocity) {
     sensorCell->lastTouch = lastTouchMoment;
     sensorCell->lastMovedX = 0;
     sensorCell->lastValueX = INVALID_DATA;
@@ -914,8 +941,7 @@ boolean handleXYZupdate() {
   }
 
   // we don't need to handle any expression in control mode
-  if (controlModeActive && !sensorCell->newVelocity) {
-    sensorCell->newVelocity = false;
+  if (controlModeActive && !newVelocity) {
     return false;
   }
 
@@ -938,8 +964,9 @@ boolean handleXYZupdate() {
   }
 
   // for a new note, we need to reset the previous value to avoid slewing from this cell's old value
-  if(sensorCell->newVelocity) {
+  if(newVelocity) {
     sensorCell->fxdPrevTimbre = FXD_CONST_255;
+    // Should we do the same here for loudness (currently this resetting is done elsewjere)
   }
   short tempY = handleYExpression();
   if (tempY == 0 || tempY == 127 || sensorCell->isMeaningfulTouch()) {
@@ -950,24 +977,24 @@ boolean handleXYZupdate() {
   // update the low row state, but not for the low row cells themselves when there's a new velocity
   // this is handled in lowRowStart, and immediately calling handleLowRowState will wrongly handle the
   // low row state transitions
-  if ((!sensorCell->newVelocity || !isLowRow()) && !userFirmwareActive) {
-    handleLowRowState(sensorCell->newVelocity, valueX, valueY, valueZ);
+  if ((!newVelocity || !isLowRow()) && !userFirmwareActive) {
+    handleLowRowState(newVelocity, valueX, valueY, valueZ);
   }
 
   // the volume fader has its own operation mode
   if (displayMode == displayVolume) {
     if (sensorCell->isMeaningfulTouch()) {
-      handleVolumeNewTouch(sensorCell->newVelocity);
+      handleVolumeNewTouch(newVelocity);
     }
   }
   else if (Split[sensorSplit].ccFaders && !userFirmwareActive) {
     if (sensorCell->isMeaningfulTouch()) {
-      handleFaderTouch(sensorCell->newVelocity);
+      handleFaderTouch(newVelocity);
     }
   }
   else if (Split[Global.currentPerSplit].sequencer && !userFirmwareActive) {
     if (sensorCell->isMeaningfulTouch()) {
-      handleSequencerTouch(sensorCell->newVelocity);
+      handleSequencerTouch(newVelocity);
     }
   }
   else if (handleNotes && sensorCell->hasNote()) {
@@ -1072,7 +1099,7 @@ boolean handleXYZupdate() {
       }
 
       // send the note on if this in a newly calculated velocity
-      if (sensorCell->newVelocity) {
+      if (newVelocity) {
         if (isStrummedSplit(sensorSplit)) {
           handleStrummedRowChange(true, 0);
         }
@@ -1104,7 +1131,6 @@ boolean handleXYZupdate() {
     }
   }
 
-  sensorCell->newVelocity = false;
   return false;
 }
 
@@ -2040,6 +2066,24 @@ inline void nextSensorCell() {
   if (++cellCount >= CELLCOUNT) {
     cellCount = 0;
   }
+
+#ifdef NEWVELOCITY
+  // skip all cells that area already active
+  if(numCellsCalculatingVelocity>0)
+  {
+    sensorCell = &cell(sensorCol, sensorRow);
+    while(sensorCell->vcount>VELOCITY2_MAX_SAMPLES)
+    {
+      sensorCol = SCANNED_CELLS[cellCount][0];
+      sensorRow = SCANNED_CELLS[cellCount][1];
+      if (++cellCount >= CELLCOUNT) {
+        cellCount = 0;
+      }
+      sensorCell = &cell(sensorCol, sensorRow);
+    }
+  }
+#endif
+
 
   // we're only scanning one of the eight control switches on each surface scan,
   // they don't need as many updates as the playing keys

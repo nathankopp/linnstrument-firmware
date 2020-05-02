@@ -243,6 +243,7 @@ const unsigned short ccFaderDefaults[8] = {1, 2, 3, 4, 5, 6, 7, 8};
 #define VELOCITY_SCALE_MEDIUM  41
 #define VELOCITY_SCALE_HIGH    40
 #define VELOCITY2_MAX_SAMPLES  6   // cannot be more than 63, due to 6-bit storage of vcount
+#define NEWVELOCITY
 
 #define DEFAULT_MIN_VELOCITY   1    // default minimum velocity value
 #define DEFAULT_MAX_VELOCITY   127  // default maximum velocity value
@@ -318,6 +319,7 @@ struct __attribute__ ((packed)) TouchInfo {
   boolean hasUsableX();                      // indicates whether the X data is usable
   void clearMusicalData();                   // clear the musical data
   void clearSensorData();                    // clears the measured sensor data
+  boolean isCalculatingVelocity();           // indicates whether the initial velocity is being calculated
   void setCalculatingVelocity();             // tag this cell as initial velocity being calculated
   void clearCalculatingVelocity();           // tag this cell as initial velocity NOT being calculated
   int32_t fxdInitialReferenceX();            // initial calibrated reference X value of each cell at the start of the touch
@@ -369,7 +371,7 @@ struct __attribute__ ((packed)) TouchInfo {
   unsigned short pressureZ:10;               // the Z value with pressure sensitivity
   unsigned short previousRawZ:12;            // the previous raw Z value
   boolean featherTouch:1;                    // indicates whether this is a feather touch
-  boolean isCalculatingVelocity:1;
+  boolean isCalculatingVelocityVar:1;
 
   boolean phantomSet:1;                      // indicates whether phantom touch coordinates are set
   byte velocity:7;                           // velocity from 0 to 127
@@ -1474,23 +1476,35 @@ inline void modeLoopPerformance() {
       if (sensorCell->initialX != SHRT_MIN &&                                    // check if there was movement on the cell
           abs(sensorCell->initialX - sensorCell->currentCalibratedX) > CALX_QUARTER_UNIT) {
         if (calcTimeDelta(millis(), sensorCell->lastTouch) > 70 ) {              // only release if it's later than 70ms after the touch to debounce some note starts
+#ifdef NEWVELOCITY
           sensorCell->clearCalculatingVelocity();
-      
+#endif
           handleTouchRelease();
         }
       }
-      else {                                                                     // this release happened on a mostly stationary touch, reduce the debounce time
-        if (calcTimeDelta(millis(), sensorCell->lastTouch) > 35 ) {              // only release if it's later than 35ms after the touch to debounce some note starts
-          sensorCell->clearCalculatingVelocity();
-          
-          handleTouchRelease();
-        }
+      else if (calcTimeDelta(millis(), sensorCell->lastTouch) > 35 ) {           // only release if it's later than 35ms after the touch to debounce some note starts
+#ifdef NEWVELOCITY
+        sensorCell->clearCalculatingVelocity();
+#endif
+        handleTouchRelease();
       }
+#ifdef NEWVELOCITY
+      else if (sensorCell->hasNote() && hasActiveMidiNote(sensorSplit, sensorCell->note, sensorCell->channel)) {
+        // without this, we sometimes get stuck notes
+        sensorCell->clearCalculatingVelocity();
+        handleTouchRelease();
+      }
+#endif
     }
 
 
     if (canShortCircuit) {
+#ifdef NEWVELOCITY
+      sensorCell->shouldRefreshData();
       nextSensorCell();
+#else
+      sensorCell->shouldRefreshData();                                           // immediately process this cell again without going through a full surface scan
+#endif
       return;
     }
   }
