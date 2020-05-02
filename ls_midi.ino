@@ -53,6 +53,10 @@ byte lastNrpnLsb = 127;
 byte lastDataMsb = 0;
 byte lastDataLsb = 0;
 
+unsigned long pressureValueHiForOneChannelSlew[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+unsigned int timbreValueForOneChannelSlew[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+
 boolean isMidiUsingDIN() {
   return Global.midiIO == 0;
 }
@@ -1921,6 +1925,22 @@ void preResetLastTimbre(byte split, byte note, byte channel) {
 void preSendTimbre(byte split, byte yValue, byte note, byte channel, bool always) {
   yValue = applyLimits(yValue, Split[split].minForY, Split[split].maxForY, fxdLimitsForYRatio[split]);
 
+  // channel-level slewing for oneChannel mode
+  if(Split[split].midiMode == oneChannel)
+  {
+    int midiChan = Split[split].midiChanMain;
+    if(yValue==0 || timbreValueForOneChannelSlew[midiChan]==0)
+    {
+      timbreValueForOneChannelSlew[midiChan] = ((unsigned int)yValue)<<3;
+    }
+    else
+    {
+      timbreValueForOneChannelSlew[midiChan] = timbreValueForOneChannelSlew[midiChan] - (timbreValueForOneChannelSlew[midiChan]>>3) + yValue;
+      yValue = timbreValueForOneChannelSlew[midiChan]>>3;
+    }
+  }
+  yValue = applyLimits(yValue, Split[split].minForY, Split[split].maxForY, fxdLimitsForYRatio[split]);
+
   switch(Split[split].expressionForY)
   {
     case timbrePolyPressure:
@@ -2013,6 +2033,7 @@ short computePressurCurve(byte split, short pressureValueHi, short weightForCubi
   return (pressureValueHiCubic*weightForCubic + pressureValueHiLinear*weightForLinear)/(weightForCubic+weightForLinear);
 }
 
+
 // Called to send Z message. Depending on midiMode, sends different types of Channel Pressure or Poly Pressure message.
 void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, byte note, byte channel, bool always) {
 
@@ -2064,7 +2085,22 @@ void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, by
   
   // scale 1016 to 16383 and fill out with the low resolution in order to reach the full range at maximum value
   pressureValueHi = (pressureValueHi * 16 + pressureValueLo) & 0x3FFF;
- 
+
+  // channel-level slewing for oneChannel mode
+  if(Split[split].midiMode == oneChannel)
+  {
+    int midiChan = Split[split].midiChanMain;
+    if(pressureValueHi==0 || pressureValueHiForOneChannelSlew[midiChan]==0)
+    {
+      pressureValueHiForOneChannelSlew[midiChan] = pressureValueHi<<3;
+    }
+    else
+    {
+      pressureValueHiForOneChannelSlew[midiChan] = pressureValueHiForOneChannelSlew[midiChan] - (pressureValueHiForOneChannelSlew[midiChan]>>3) + pressureValueHi;
+      pressureValueHi = pressureValueHiForOneChannelSlew[midiChan]>>3;
+    }
+  }
+   
   switch(Split[split].expressionForZ)
   {
     case loudnessPolyPressure:
