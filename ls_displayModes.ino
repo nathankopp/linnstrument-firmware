@@ -669,7 +669,7 @@ void paintPerSplitDisplay(byte side) {
       break;
   }
 
-  if(Split[side].releasePreserveLastZ) {
+  if(Split[side].pressureResetOnRelease) {
     setLed(10, 2, Split[side].colorMain, cellOn);
   }
 

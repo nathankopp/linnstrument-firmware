@@ -572,7 +572,7 @@ void initializePresetSettings() {
         p.split[s].customCCForZ = 11;
         p.split[s].ccForZ14Bit = false;
         p.split[s].curveForZ = linearCurve;
-        p.split[s].releasePreserveLastZ = false;
+        p.split[s].pressureResetOnRelease = true;
         memcpy(&p.split[s].ccForFader, ccFaderDefaults, sizeof(unsigned short)*8);
         p.split[s].colorAccent = COLOR_CYAN;
         p.split[s].colorLowRow = COLOR_YELLOW;
@@ -1319,7 +1319,7 @@ void handlePerSplitSettingNewTouch() {
           else Split[Global.currentPerSplit].curveForZ = linearCurve;
           break;
         case 2:
-          Split[Global.currentPerSplit].releasePreserveLastZ = !Split[Global.currentPerSplit].releasePreserveLastZ;
+          Split[Global.currentPerSplit].pressureResetOnRelease = !Split[Global.currentPerSplit].pressureResetOnRelease;
       }
       break;
 

@@ -1869,11 +1869,9 @@ void handleTouchRelease() {
   }
   else if (sensorCell->hasNote()) {
 
-    // reset the pressure when the note is released, but only for the afterTouch curve
-    if (Split[sensorSplit].sendZ && isZExpressiveCell()) {
-      if(Split[sensorSplit].curveForZ == aftertouchCurve || !Split[sensorSplit].releasePreserveLastZ) {
-        preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel, true);
-      }
+    // reset the pressure when the note is released, but only if pressureResetOnRelease is true
+    if (Split[sensorSplit].sendZ && isZExpressiveCell() && Split[sensorSplit].pressureResetOnRelease) {
+      preSendLoudness(sensorSplit, 0, 0, sensorCell->note, sensorCell->channel, true);
     }
 
     // unregister the note <> cell mapping
