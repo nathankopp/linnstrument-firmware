@@ -2032,18 +2032,18 @@ void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, by
     {
       // if attack is within the bottom 20%, then use almost-linear for the bottom half
       weightForCubic = 1;
-      weightForLinear = 9;
+      weightForLinear = 8;
     }
     else {
       unsigned long touchedDurationMs = lastTouchMoment - sensorCell->lastTouch;
-      if(touchedDurationMs>900) {
-        // after 900ms, use almost-linear
+      if(touchedDurationMs>1800) {
+        // after 1900ms, use almost-linear
         weightForCubic = 1;
-        weightForLinear = 9;
+        weightForLinear = 8;
       }
       else {
         // for first second, interpolate from cubic to almost-linear
-        weightForCubic = 1000-touchedDurationMs;
+        weightForCubic = 2000-touchedDurationMs;
         weightForLinear = touchedDurationMs;
       }
     }
