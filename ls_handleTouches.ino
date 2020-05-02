@@ -263,13 +263,13 @@ boolean isPhantomTouchContextual() {
       byte touchedRow = 31 - __builtin_clz(rowsInSensorColTouched);
 
       // for each touched row we also check each touched column in the row of the current sensor
-      int32_t colsInRowTouched = colsInSensorRowTouched;
+      int32_t colsInSensorRowTouchedCopy = colsInSensorRowTouched;
 
       // we use the same looping approach as explained for the rows
-      while (colsInRowTouched) {
+      while (colsInSensorRowTouchedCopy) {
 
         // we use the same leading zeros approach to dermine the left-most active bit
-        byte touchedCol = 31 - __builtin_clz(colsInRowTouched);
+        byte touchedCol = 31 - __builtin_clz(colsInSensorRowTouchedCopy);
 
         // if we find a cell that has both the touched row and touched column set,
         // then the current sensor completed a rectangle by being the fourth corner
@@ -295,7 +295,7 @@ boolean isPhantomTouchContextual() {
         }
 
         // turn the left-most active bit off, to continue the iteration over the touched columns
-        colsInRowTouched &= ~(1 << touchedCol);
+        colsInSensorRowTouchedCopy &= ~(1 << touchedCol);
       }
 
       // turn the left-most active bit off, to continue the iteration over the touched rows
