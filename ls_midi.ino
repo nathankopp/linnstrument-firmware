@@ -53,6 +53,7 @@ byte lastNrpnLsb = 127;
 byte lastDataMsb = 0;
 byte lastDataLsb = 0;
 
+unsigned long pitchValueForSlew[16] = {0x2000,0x2000,0x2000,0x2000,0x2000,0x2000,0x2000,0x2000,0x2000,0x2000,0x2000,0x2000,0x2000,0x2000,0x2000,0x2000};
 unsigned long pressureValueHiForOneChannelSlew[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 unsigned int timbreValueForOneChannelSlew[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
@@ -1928,7 +1929,7 @@ void preSendTimbre(byte split, byte yValue, byte note, byte channel, bool always
   // channel-level slewing for oneChannel mode
   if(Split[split].midiMode == oneChannel)
   {
-    int midiChan = Split[split].midiChanMain;
+    int midiChan = Split[split].midiChanMain-1;
     if(yValue==0 || timbreValueForOneChannelSlew[midiChan]==0)
     {
       timbreValueForOneChannelSlew[midiChan] = ((unsigned int)yValue)<<3;
@@ -2089,7 +2090,7 @@ void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, by
   // channel-level slewing for oneChannel mode
   if(Split[split].midiMode == oneChannel)
   {
-    int midiChan = Split[split].midiChanMain;
+    int midiChan = Split[split].midiChanMain-1;
     if(pressureValueHi==0 || pressureValueHiForOneChannelSlew[midiChan]==0)
     {
       pressureValueHiForOneChannelSlew[midiChan] = pressureValueHi<<3;
@@ -2786,8 +2787,19 @@ boolean hasPreviousPitchBendValue(byte channel) {
 }
 
 void midiSendPitchBend(int pitchval, byte channel) {
+
   int bend = constrain(pitchval + 0x2000, 0, 16383);
   channel = constrain(channel-1, 0, 15);
+
+  if(bend==0x2000 || pitchValueForSlew[channel]==0x2000)
+  {
+    pitchValueForSlew[channel] = ((unsigned int)bend)<<3;
+  }
+  else
+  {
+    pitchValueForSlew[channel] = pitchValueForSlew[channel] - (pitchValueForSlew[channel]>>3) + bend;
+    bend = pitchValueForSlew[channel]>>3;
+  }
 
   unsigned long now = micros();
   if (lastValueMidiPB[channel] == bend) return;
