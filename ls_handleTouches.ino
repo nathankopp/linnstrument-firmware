@@ -502,14 +502,14 @@ boolean handleNewTouch() {
         // however, it could be the low row and in certain situations it doesn't allow new touches
         else if (!isLowRow() || allowNewTouchOnLowRow()) {
           initVelocity();
-#ifdef NEWVELOCITY
-          calcVelocityNew(sensorCell->velocityZ);
-          sensorCell->setCalculatingVelocity();
+          if (Global.alternativeVelocity) {
+            calcVelocityNew(sensorCell->velocityZ);
+            sensorCell->setCalculatingVelocity();
+          }
+          else {
+            calcVelocity(sensorCell->velocityZ);
+          }
           result = true;
-#else
-          calcVelocity(sensorCell->velocityZ);
-          result = true;
-#endif
         }
         else {
           cellTouched(untouchedCell);
@@ -518,14 +518,14 @@ boolean handleNewTouch() {
         break;
       default:
         initVelocity();
-#ifdef NEWVELOCITY
-        calcVelocityNew(sensorCell->velocityZ);
+        if (Global.alternativeVelocity) {
+          calcVelocityNew(sensorCell->velocityZ);
+        }
+        else {
+          calcVelocity(sensorCell->velocityZ);
+        }
         sensorCell->setCalculatingVelocity();
         result = true;
-#else
-        calcVelocity(sensorCell->velocityZ);
-        result = true;
-#endif
         break;
     }
   }
@@ -727,9 +727,7 @@ void handleNonPlayingTouch() {
       break;
     case displayCalibration:
       initVelocity();
-#ifdef NEWVELOCITY
       sensorCell->clearCalculatingVelocity();
-#endif
       break;
     case displayEditAudienceMessage:
       handleEditAudienceMessageNewTouch();
@@ -790,28 +788,23 @@ boolean handleXYZupdate() {
         break;
     }
   }
-  
-#ifdef NEWVELOCITY
-  VelocityState velState = calcVelocityNew(sensorCell->velocityZ);
-#else
-  VelocityState velState = calcVelocity(sensorCell->velocityZ);
-#endif
+
+  VelocityState velState;
+  if (Global.alternativeVelocity) {
+    velState = calcVelocityNew(sensorCell->velocityZ);
+  } else {
+    velState = calcVelocity(sensorCell->velocityZ);
+  }
 
   // velocity calculation works in stages, handle each one
   switch (velState) {
     // when the velocity is being calculated, the performance loop can be short-circuited
     case velocityCalculating:
-#ifdef NEWVELOCITY
       sensorCell->setCalculatingVelocity();
-      break;
-#else
       return true;
-#endif
 
     case velocityNew:
-#ifdef NEWVELOCITY
       sensorCell->clearCalculatingVelocity();
-#endif
 
       if (isPhantomTouchIndividual() || isPhantomTouchContextual()) {
         cellTouched(untouchedCell);
@@ -823,24 +816,25 @@ boolean handleXYZupdate() {
       break;
 
     case velocityCalculated:
-#ifdef NEWVELOCITY
       sensorCell->clearCalculatingVelocity();
-#endif
       
       // velocity has been calculated, no need to short-circuit anymore and we can continue
       // with the main touch logic
       break;
   }
 
-#ifdef NEWVELOCITY
-  // If we are calculating velocity for at least one cell, then skip all the rest of this function
-  // FOR ALL CELLS (not just the ones that are calculating velocity).  This means we don't spend
-  // time sending any messages.  This takes the place of the previous 'canShortCircuit' concept
-  // so that velocity calculations are fast for quick note-on messages, while still scanning all
-  // of the pads to improve response to multiple notes being hit simultaneously.
-  if(numCellsCalculatingVelocity > 0) return true;
-#endif
+  if (Global.alternativeVelocity)
+  {
+    // If we are calculating velocity for at least one cell, then skip all the rest of this function
+    // FOR ALL CELLS (not just the ones that are calculating velocity).  This means we don't spend
+    // time sending any messages.  This takes the place of the previous 'canShortCircuit' concept
+    // so that velocity calculations are fast for quick note-on messages, while still scanning all
+    // of the pads to improve response to multiple notes being hit simultaneously.
 
+    if(!sensorCell->newVelocity && numCellsCalculatingVelocity > 0) return true;
+  }
+
+  // move the cell's 'newVelocity' into a local variable for processing the remainder of this function
   boolean newVelocity = sensorCell->newVelocity;
   sensorCell->newVelocity = false;
 
@@ -1349,7 +1343,7 @@ void sendNewNote() {
       }
       else {
         byte valueZ = scale1016to127(valueZHi, false);
-  
+
         preSendLoudness(sensorSplit, valueZ, valueZHi, sensorCell->note, sensorCell->channel, true);
         
         // send the note on
@@ -2067,22 +2061,23 @@ inline void nextSensorCell() {
     cellCount = 0;
   }
 
-#ifdef NEWVELOCITY
-  // skip all cells that area already active
-  if(numCellsCalculatingVelocity>0)
+  if (Global.alternativeVelocity)
   {
-    sensorCell = &cell(sensorCol, sensorRow);
-    while(sensorCell->vcount>VELOCITY2_MAX_SAMPLES)
+    if(numCellsCalculatingVelocity > 0)
     {
-      sensorCol = SCANNED_CELLS[cellCount][0];
-      sensorRow = SCANNED_CELLS[cellCount][1];
-      if (++cellCount >= CELLCOUNT) {
-        cellCount = 0;
-      }
+      // skip all cells that area already active
       sensorCell = &cell(sensorCol, sensorRow);
+      while(sensorCell->vcount > VELOCITY2_MAX_SAMPLES)
+      {
+        sensorCol = SCANNED_CELLS[cellCount][0];
+        sensorRow = SCANNED_CELLS[cellCount][1];
+        if (++cellCount >= CELLCOUNT) {
+          cellCount = 0;
+        }
+        sensorCell = &cell(sensorCol, sensorRow);
+      }
     }
   }
-#endif
 
 
   // we're only scanning one of the eight control switches on each surface scan,

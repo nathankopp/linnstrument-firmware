@@ -498,6 +498,7 @@ void initializePresetSettings() {
     g.minForVelocity = DEFAULT_MIN_VELOCITY;
     g.maxForVelocity = DEFAULT_MAX_VELOCITY;
     g.valueForFixedVelocity = DEFAULT_FIXED_VELOCITY;
+    g.alternativeVelocity = false;
     g.pressureSensitivity = pressureMedium;
     g.pressureAftertouch = false;
     g.midiIO = 1;      // set to 1 for USB jacks (not MIDI jacks)
@@ -2790,6 +2791,9 @@ void handleGlobalSettingNewTouch() {
             else {
               Global.arpOctave = 2;
             }
+            break;
+          case 2:
+            Global.alternativeVelocity = !Global.alternativeVelocity;
             break;
           case 3:
             if (!isSyncedToMidiClock()) {

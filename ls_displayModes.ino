@@ -1758,6 +1758,10 @@ void paintGlobalSettingsDisplay() {
       lightLed(14, 1);
     }
 
+    if(Global.alternativeVelocity) {
+      lightLed(14, 2);
+    }
+
     paintGlobalSettingsFlashTempo(micros());
   }
 

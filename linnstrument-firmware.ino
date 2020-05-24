@@ -57,7 +57,7 @@ For any questions about this, contact Roger Linn Design at support@rogerlinndesi
 /******************************************** CONSTANTS ******************************************/
 
 const char* OSVersion = "222.";
-const char* OSVersionBuild = ".K07";
+const char* OSVersionBuild = ".K08";
 
 // SPI addresses
 #define SPI_LEDS    10               // Arduino pin for LED control over SPI
@@ -110,7 +110,7 @@ byte NUMROWS = 8;                    // number of touch sensor rows
 #define COLOR_LIME     10
 #define COLOR_PINK     11
 
-// Special row offset values, for legacy reasons
+// Special row offset values, for legacy reasonsa
 #define ROWOFFSET_NOOVERLAP        0x00
 #define ROWOFFSET_OCTAVECUSTOM     0x0c
 #define ROWOFFSET_GUITAR           0x0d
@@ -795,6 +795,7 @@ struct GlobalSettings {
   signed char arpOctave;                     // the number of octaves that the arpeggiator has to operate over: 0, +1, or +2
   SustainBehavior sustainBehavior;           // the way the sustain pedal influences the notes
   boolean splitActive;                       // false = split off, true = split on
+  boolean alternativeVelocity;               // true = use alternative velocity calcuation
 };
 #define Global config.settings.global
 
@@ -1351,6 +1352,7 @@ void setup() {
     operatingMode = modeManufacturingTest;
 
     Global.velocitySensitivity = velocityLow;
+    Global.alternativeVelocity = false;
     Global.minForVelocity = 0;
     Global.maxForVelocity = 127;
     applyLimitsForVelocity();
@@ -1473,38 +1475,43 @@ inline void modeLoopPerformance() {
       canShortCircuit = handleXYZupdate();                                       // handle any X, Y or Z movements
     }
     else if (previousTouch != untouchedCell && !sensorCell->isActiveTouch()) {   // if not touched now but touched before, it's been released
+
       if (sensorCell->initialX != SHRT_MIN &&                                    // check if there was movement on the cell
           abs(sensorCell->initialX - sensorCell->currentCalibratedX) > CALX_QUARTER_UNIT) {
         if (calcTimeDelta(millis(), sensorCell->lastTouch) > 70 ) {              // only release if it's later than 70ms after the touch to debounce some note starts
-#ifdef NEWVELOCITY
           sensorCell->clearCalculatingVelocity();
-#endif
           handleTouchRelease();
         }
       }
       else if (calcTimeDelta(millis(), sensorCell->lastTouch) > 35 ) {           // only release if it's later than 35ms after the touch to debounce some note starts
-#ifdef NEWVELOCITY
         sensorCell->clearCalculatingVelocity();
-#endif
         handleTouchRelease();
       }
-#ifdef NEWVELOCITY
-      else if (sensorCell->hasNote() && hasActiveMidiNote(sensorSplit, sensorCell->note, sensorCell->channel)) {
+      else if (Global.alternativeVelocity && sensorCell->hasNote() && hasActiveMidiNote(sensorSplit, sensorCell->note, sensorCell->channel)) {
         // without this, we sometimes get stuck notes
         sensorCell->clearCalculatingVelocity();
         handleTouchRelease();
       }
-#endif
+    }
+    else
+    {
+      if (Global.alternativeVelocity && sensorCell->isCalculatingVelocityVar)
+      {
+        handleXYZupdate();
+        
+        if (sensorCell->hasNote() && hasActiveMidiNote(sensorSplit, sensorCell->note, sensorCell->channel)) {
+          sensorCell->clearCalculatingVelocity();
+          handleTouchRelease();
+        }
+      }
     }
 
 
     if (canShortCircuit) {
-#ifdef NEWVELOCITY
       sensorCell->shouldRefreshData();
-      nextSensorCell();
-#else
-      sensorCell->shouldRefreshData();                                           // immediately process this cell again without going through a full surface scan
-#endif
+      if (Global.alternativeVelocity) {
+        nextSensorCell();
+      }
       return;
     }
   }

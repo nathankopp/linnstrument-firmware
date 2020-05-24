@@ -230,6 +230,12 @@ inline byte scale1016to127(int v, boolean allowZero) {
   return constrain(((v * 10) + 40) / 80, allowZero ? 0 : 1, 127);
 }
 
+inline int scale127to1016(byte lo, boolean allowZero) {
+  return constrain(((lo * 80) - 40) / 10, allowZero ? 0 : 1, 1016);
+}
+
+
+
 // since the velocity calculation is short-circuited to remain on the same cell,
 // we don't need to store the temporary values independently for each cell, hence saving memory
 static byte vcount1;
@@ -262,7 +268,30 @@ VelocityState calcVelocityNew(unsigned short z) {
   }
   else if (sensorCell->vcount == VELOCITY2_MAX_SAMPLES) {
     if(z > sensorCell->maxVelocityZ) sensorCell->maxVelocityZ = z;
-    sensorCell->velocity = calcPreferredVelocity(sensorCell->maxVelocityZ);
+
+    int scale;
+    const short* curve;
+    switch (Global.velocitySensitivity) {
+      case velocityHigh:
+        scale = VELOCITY_SCALE_HIGH;
+        curve = Z_CURVE_HIGH;
+        break;
+      case velocityMedium:
+      default:
+        scale = VELOCITY_SCALE_MEDIUM;
+        curve = Z_CURVE_MEDIUM;
+        break;
+      case velocityLow:
+        scale = VELOCITY_SCALE_LOW;
+        curve = Z_CURVE_LOW;
+        break;
+    }
+
+    int maxVelocityZHi = scale127to1016(sensorCell->maxVelocityZ, false);
+    maxVelocityZHi = curve[maxVelocityZHi];
+
+    sensorCell->velocity = calcPreferredVelocity(scale1016to127(maxVelocityZHi, false));
+    
     sensorCell->vcount = VELOCITY2_MAX_SAMPLES + 1;
     return velocityNew;
   }
@@ -342,11 +371,12 @@ byte calcPreferredVelocity(byte velocity) {
 }
 
 boolean TouchInfo::isCalculatingVelocity() {
-#ifdef NEWVELOCITY
-  return sensorCell->vcount > 0 && sensorCell->vcount <= VELOCITY2_MAX_SAMPLES;
-#else
-  return sensorCell->vcount > 0 && sensorCell->vcount < VELOCITY_TOTAL_SAMPLES;
-#endif
+  if (Global.alternativeVelocity) {
+    return sensorCell->vcount > 0 && sensorCell->vcount <= VELOCITY2_MAX_SAMPLES;
+  }
+  else {
+    return sensorCell->vcount > 0 && sensorCell->vcount < VELOCITY_TOTAL_SAMPLES;
+  }
 }
 
 void TouchInfo::setCalculatingVelocity() {
