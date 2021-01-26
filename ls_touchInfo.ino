@@ -175,7 +175,7 @@ void initializeTouchInfo() {
       cell(col, row).clearSensorData();
       cell(col, row).vcount = 0;
       cell(col, row).vcount2 = 0;
-      cell(col, row).maxVelocityZ = 0;
+      cell(col, row).maxVelocityZHi = 0;
       cell(col, row).isCalculatingVelocityVar = false;
       cell(col, row).newVelocity = false;
       cell(col, row).velocity = 0;
@@ -258,37 +258,35 @@ void initVelocity() {
   sensorCell->vcount = 0;
   sensorCell->vcount2 = 0;
   sensorCell->velocity = 0;
-  sensorCell->maxVelocityZ = 0;
+  sensorCell->maxVelocityZHi = 0;
   sensorCell->newVelocity = false;
 }
 
 VelocityState calcVelocityNew(unsigned short z) {
+
+  int zhi = sensorCell->velocityZHi;
+  
   if (sensorCell->vcount > VELOCITY2_MAX_SAMPLES) {
     return velocityCalculated;
   }
   else if (sensorCell->vcount == VELOCITY2_MAX_SAMPLES) {
-    if(z > sensorCell->maxVelocityZ) sensorCell->maxVelocityZ = z;
+    if(zhi > sensorCell->maxVelocityZHi) sensorCell->maxVelocityZHi = zhi;
 
-    int scale;
-    const short* curve;
+    int maxVelocityZHi = sensorCell->maxVelocityZHi;
+
+    // use shallower curves
     switch (Global.velocitySensitivity) {
       case velocityHigh:
-        scale = VELOCITY_SCALE_HIGH;
-        curve = Z_CURVE_HIGH;
+        maxVelocityZHi = Z_CURVE_MEDIUM[maxVelocityZHi];
         break;
       case velocityMedium:
       default:
-        scale = VELOCITY_SCALE_MEDIUM;
-        curve = Z_CURVE_MEDIUM;
+        maxVelocityZHi = Z_CURVE_LOW[maxVelocityZHi];
         break;
       case velocityLow:
-        scale = VELOCITY_SCALE_LOW;
-        curve = Z_CURVE_LOW;
+        maxVelocityZHi = (maxVelocityZHi+Z_CURVE_LOW[maxVelocityZHi])>>1;  // average low and linear (use shift to divide by 2)
         break;
     }
-
-    int maxVelocityZHi = scale127to1016(sensorCell->maxVelocityZ, false);
-    maxVelocityZHi = curve[maxVelocityZHi];
 
     sensorCell->velocity = calcPreferredVelocity(scale1016to127(maxVelocityZHi, false));
     
@@ -297,7 +295,7 @@ VelocityState calcVelocityNew(unsigned short z) {
   }
   else {
     sensorCell->vcount++;
-    if(z > sensorCell->maxVelocityZ) sensorCell->maxVelocityZ = z;
+    if(zhi > sensorCell->maxVelocityZHi) sensorCell->maxVelocityZHi = zhi;
     return velocityCalculating;
   }
 }
@@ -514,6 +512,25 @@ inline unsigned short calculatePreferredPressureRange(unsigned short sensorRange
     return sensorRangePressure;
 }
 
+inline unsigned short calculatePreferredVelocityRange(unsigned short sensorRangeZ) {
+    unsigned short sensorRangeVelocity = sensorRangeZ;
+    switch (Global.velocitySensitivity) {
+      case velocityHigh:
+        sensorRangeVelocity -= 254;
+        break;
+      case velocityMedium:
+        sensorRangeVelocity -= 63;
+        break;
+      case velocityLow:
+        sensorRangeVelocity += 127;
+        break;
+      case velocityFixed:
+        // no change
+        break;
+    }
+    return sensorRangeVelocity;
+}
+
 inline void TouchInfo::refreshZ() {
   if (shouldRefreshZ) {
     // store the raw Z data for later comparisons and calculations
@@ -522,6 +539,7 @@ inline void TouchInfo::refreshZ() {
     currentRawZ = readZ();
     featherTouch = false;
     velocityZ = 0;
+    velocityZHi = 0;
     pressureZ = 0;
 
     shouldRefreshZ = false;
@@ -529,6 +547,7 @@ inline void TouchInfo::refreshZ() {
     if (controlModeActive && currentRawZ >= CONTROL_MODE_LOZ) {
       featherTouch = true;
       velocityZ = CONTROL_VELOCITY;
+      velocityZHi = scale127to1016(CONTROL_VELOCITY, true);
       pressureZ = CONTROL_PRESSURE;
       return;
     }
@@ -566,32 +585,20 @@ inline void TouchInfo::refreshZ() {
     // the control switches always have maximum velocity and pressure
     if (sensorCol == 0) {
       velocityZ = CONTROL_VELOCITY;
+      velocityZHi = scale127to1016(CONTROL_VELOCITY, true);
       pressureZ = CONTROL_PRESSURE;
       return;
     }
 
     // calculate the velocity and pressure for the playing cells
     unsigned short sensorRange = calculateSensorRangeZ();
-
-    unsigned short sensorRangeVelocity = sensorRange;
-    switch (Global.velocitySensitivity) {
-      case velocityHigh:
-        sensorRangeVelocity -= 254;
-        break;
-      case velocityMedium:
-        sensorRangeVelocity -= 63;
-        break;
-      case velocityLow:
-        sensorRangeVelocity += 127;
-        break;
-      case velocityFixed:
-        // no change
-        break;
-    }
-
+    unsigned short sensorRangeVelocity = calculatePreferredVelocityRange(sensorRange);
     unsigned short sensorRangePressure = calculatePreferredPressureRange(sensorRange);
 
+    percentRawZ = (constrain(usableZ, 0, sensorRange) * 100) / sensorRange;
+
     unsigned short usableVelocityZ = constrain(usableZ, 1, sensorRangeVelocity);
+    
     unsigned short usablePressureZ;
     if (Global.pressureAftertouch) {
       sensorRangePressure /= 5;
@@ -601,8 +608,6 @@ inline void TouchInfo::refreshZ() {
       usablePressureZ = constrain(usableZ, 1, sensorRangePressure);
     }
     
-    percentRawZ = (constrain(usableZ, 0, sensorRange) * 100) / sensorRange;
-
     int32_t fxd_usableVelocityZ = FXD_MUL(FXD_FROM_INT(usableVelocityZ), FXD_DIV(FXD_FROM_INT(MAX_SENSOR_RANGE_Z), FXD_FROM_INT(sensorRangeVelocity)));
     int32_t fxd_usablePressureZ = FXD_MUL(FXD_FROM_INT(usablePressureZ), FXD_DIV(FXD_FROM_INT(MAX_SENSOR_RANGE_Z), FXD_FROM_INT(sensorRangePressure)));
 
@@ -611,6 +616,7 @@ inline void TouchInfo::refreshZ() {
     usablePressureZ = FXD_TO_INT(fxd_usablePressureZ);
 
     // scale the result and store it as a byte in the range 0-127
+    velocityZHi = constrain(usableVelocityZ, 0, 1016);
     velocityZ = scale1016to127(usableVelocityZ, false);
     pressureZ = constrain(usablePressureZ, 0, 1016);
   }
@@ -691,6 +697,7 @@ void TouchInfo::clearSensorData() {
   percentRawZ = 0;
   featherTouch = false;
   velocityZ = 0;
+  velocityZHi = 0;
   pressureZ = 0;
   shouldRefreshZ = true;
   pendingReleaseCount = 0;

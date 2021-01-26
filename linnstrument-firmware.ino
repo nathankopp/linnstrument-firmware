@@ -378,7 +378,8 @@ struct __attribute__ ((packed)) TouchInfo {
   
   boolean shouldRefreshZ:1;                  // indicate whether it's necessary to refresh Z
   byte velocityZ:7;                          // the Z value with velocity sensitivity
-  byte maxVelocityZ;                         // 0..127
+  unsigned short velocityZHi:12;             //
+  unsigned short maxVelocityZHi:12;          //
 
   byte noteInitialVelocity:8;
   unsigned short noteInitialMaxValueZHi:10;

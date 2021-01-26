@@ -2040,6 +2040,12 @@ void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, by
 
   sensorCell->previousValueZHi = pressureValueHi;
 
+  if(Split[sensorSplit].midiMode == oneChannel) {
+    pressureValueHi = computeMaxPressure(sensorSplit);
+    pressureValueLo = scale1016to127(pressureValueHi, true);
+  }
+
+
   // Handle the curves
   
   if (Split[split].curveForZ == aftertouchCurve) {
@@ -2057,17 +2063,8 @@ void preSendLoudness(byte split, byte pressureValueLo, short pressureValueHi, by
       weightForLinear = 8;
     }
     else {
-      unsigned long touchedDurationMs = lastTouchMoment - sensorCell->lastTouch;
-      if(touchedDurationMs>1800) {
-        // after 1900ms, use almost-linear
-        weightForCubic = 1;
-        weightForLinear = 8;
-      }
-      else {
-        // for first second, interpolate from cubic to almost-linear
-        weightForCubic = 2000-touchedDurationMs;
-        weightForLinear = touchedDurationMs;
-      }
+      weightForCubic = 1;
+      weightForLinear = 0;
     }
     pressureValueHi =  computePressurCurve(split, pressureValueHi, weightForCubic, weightForLinear);
     pressureValueLo = scale1016to127(pressureValueHi, true);

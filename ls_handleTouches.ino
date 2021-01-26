@@ -130,7 +130,7 @@ void transferFromSameRowCell(byte col) {
   sensorCell->previousValueZHi = fromCell->previousValueZHi;
   sensorCell->vcount = fromCell->vcount;
   sensorCell->vcount2 = fromCell->vcount2;
-  sensorCell->maxVelocityZ = fromCell->maxVelocityZ;
+  sensorCell->maxVelocityZHi = fromCell->maxVelocityZHi;
   noteTouchMapping[sensorSplit].changeCell(sensorCell->note, sensorCell->channel, sensorCol, sensorRow);
 
   fromCell->lastTouch = 0;
@@ -203,7 +203,7 @@ void transferToSameRowCell(byte col) {
   toCell->previousValueZHi = sensorCell->previousValueZHi;
   toCell->vcount = sensorCell->vcount;
   toCell->vcount2 = sensorCell->vcount2;
-  toCell->maxVelocityZ = sensorCell->maxVelocityZ;
+  toCell->maxVelocityZHi = sensorCell->maxVelocityZHi;
   noteTouchMapping[sensorSplit].changeCell(toCell->note, toCell->channel, col, sensorRow);
 
   sensorCell->lastTouch = 0;
@@ -303,6 +303,37 @@ boolean isPhantomTouchContextual() {
     }
   }
   return false;
+}
+
+int computeMaxPressure(byte split) {
+  int maxPressure = 0;
+  for (int r = 0; r < NUMROWS; ++r) {
+    int32_t colsInRowsTouchedCopy = colsInRowsTouched[r];
+    if (colsInRowsTouchedCopy) {
+      // if split is not active and there's a touch on the row, it's obviously in the current split
+      if (Global.splitActive) {
+        if (split == LEFT)
+        {
+          colsInRowsTouchedCopy = colsInRowsTouchedCopy & ((int32_t)(1 << Global.splitPoint) - 1);
+        }
+        else
+        {
+          colsInRowsTouchedCopy = colsInRowsTouchedCopy & ~((int32_t)(1 << Global.splitPoint) - 1);
+        }
+      }
+
+      while (colsInRowsTouchedCopy) {
+        byte touchedCol = 31 - __builtin_clz(colsInRowsTouchedCopy);
+        int pressure = cell(touchedCol, r).pressureZ;
+        if(pressure>maxPressure) maxPressure = pressure;
+  
+        // turn the left-most active bit off, to continue the iteration over the touched rows
+        colsInRowsTouchedCopy &= ~(int32_t)(1 << touchedCol);
+      }
+
+    }
+  }
+  return maxPressure;
 }
 
 byte countTouchesInColumn() {
@@ -1981,7 +2012,7 @@ void postTouchRelease() {
   // reset velocity calculations
   sensorCell->vcount = 0;
   sensorCell->vcount2 = 0;
-  sensorCell->maxVelocityZ = 0;
+  sensorCell->maxVelocityZHi = 0;
   sensorCell->newVelocity = false;
 
   sensorCell->clearSensorData();
