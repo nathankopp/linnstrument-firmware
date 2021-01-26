@@ -420,6 +420,19 @@ void handleMidiInput(unsigned long nowMicros) {
               checkRefreshLedColumn(micros());
             }
             break;
+          case 23:
+            if (midiData2 == 1) {
+              storeCustomLedLayer();
+              storeSettings();
+            }
+            break;
+          case 24:
+            if (midiData2 == 1) {
+              clearStoredCustomLedLayer();
+              loadCustomLedLayer();
+              storeSettings();
+            }
+            break;
           case 38:
             if (lastRpnMsb != 127 || lastRpnLsb != 127) {
               lastDataLsb = midiData2;
@@ -2974,8 +2987,8 @@ void midiSendMpeState(byte mainChannel, byte polyphony) {
 }
 
 void midiSendMpePitchBendRange(byte split) {
-  if (Split[split].mpe && getBendRange(split) == 24) {
-    midiSendRPN(0, 24 << 7, Split[split].midiChanMain);
+  if (Split[split].mpe && getBendRange(split) == 48) {
+    midiSendRPN(0, 48 << 7, Split[split].midiChanMain);
   }
 }
 

@@ -37,6 +37,8 @@ CC Number   Used for
 21          Row coordinate for cell color change with CC 22 (starts from 0)
 22          Change the color of the cell with the provided column and row coordinates
             see color value table below, 11+: default color
+23			Make current custom cell colors persistent (1: persist)
+24			Clear persisted custom cell colors (1: clear)
 
 NRPN input
 ==========
@@ -270,14 +272,14 @@ NRPN   Value   Description
 
 Color Values
 ============
-0   Off
+0   as set in Note Lights settings
 1   Red
 2   Yellow
 3   Green
 4   Cyan
 5   Blue
 6   Magenta
-7   Black
+7   Off
 8   White
 9   Orange
 10  Lime

@@ -1,5 +1,5 @@
 /*=====================================================================================================================
-======================================== LinnStrument Operating System v2.2.2 =========================================
+======================================== LinnStrument Operating System v2.3.0 =========================================
 =======================================================================================================================
 
 Operating System for the LinnStrument (c) music controller by Roger Linn Design (www.rogerlinndesign.com).
@@ -56,8 +56,8 @@ For any questions about this, contact Roger Linn Design at support@rogerlinndesi
 
 /******************************************** CONSTANTS ******************************************/
 
-const char* OSVersion = "222.";
-const char* OSVersionBuild = ".K08";
+const char* OSVersion = "230.";
+const char* OSVersionBuild = ".K09";
 
 // SPI addresses
 #define SPI_LEDS    10               // Arduino pin for LED control over SPI
@@ -231,6 +231,13 @@ byte NUMROWS = 8;                    // number of touch sensor rows
 
 const unsigned short ccFaderDefaults[8] = {1, 2, 3, 4, 5, 6, 7, 8};
 
+// Two buffers of ...
+// A 26 by 8 byte array containing one byte for each LED:
+// bits 4-6: 3 bits to select the color: 0:off, 1:red, 2:yellow, 3:green, 4:cyan, 5:blue, 6:magenta
+// bits 0-2: 0:off, 1: on, 2: pulse
+const unsigned long LED_LAYER_SIZE = MAXCOLS * MAXROWS;
+const unsigned long LED_ARRAY_SIZE = (MAX_LED_LAYERS+1) * LED_LAYER_SIZE;
+
 /******************************************** VELOCITY *******************************************/
 
 #define VELOCITY_SAMPLES       4
@@ -251,6 +258,8 @@ const unsigned short ccFaderDefaults[8] = {1, 2, 3, 4, 5, 6, 7, 8};
 
 
 /*************************************** CONVENIENCE MACROS **************************************/
+
+#define INVALID_DATA SHRT_MAX
 
 // convenience macros to easily access the cells with touch information
 #define cell(col, row)             touchInfo[col][row]
@@ -309,6 +318,7 @@ struct __attribute__ ((packed)) TouchInfo {
   inline boolean isActiveTouch();            // ensure that Z is updated to the latest scan and check if it was an active touch
   inline boolean isStableYTouch();           // ensure that Z is updated to the latest scan and check if the touch is capable of providing stable Y reading
   inline void refreshZ();                    // ensure that Z is updated to the latest scan
+  inline boolean isPastDebounceDelay();      // indicates whether the touch is past the debounce delay
   boolean hasNote();                         // check if a MIDI note is active for this touch
   void clearPhantoms();                      // clear the phantom coordinates
   void clearAllPhantoms();                   // clear the phantom coordinates of all the cells that are involved
@@ -329,7 +339,7 @@ struct __attribute__ ((packed)) TouchInfo {
 #endif
 
   unsigned long lastTouch:32;                // the timestamp when this cell was last touched
-  short initialX:16;                         // initial calibrated X value of each cell at the start of the touch, SHRT_MIN meaning that it's unassigned
+  short initialX:16;                         // initial calibrated X value of each cell at the start of the touch, INVALID_DATA meaning that it's unassigned
   short initialColumn:16;                    // initial column of each cell at the start of the touch
   short quantizationOffsetX:16;              // quantization offset to be applied to the X value
   unsigned short currentRawX:16;             // last raw X value of each cell
@@ -385,6 +395,9 @@ struct __attribute__ ((packed)) TouchInfo {
   unsigned short noteInitialMaxValueZHi:10;
   unsigned short previousValueZHi:10;
   boolean newVelocity:1;
+
+  boolean didMove:1;                         // indicates whether the touch has ever moved
+
 };
 TouchInfo touchInfo[MAXCOLS][MAXROWS];       // store as much touch information instances as there are cells
 
@@ -504,7 +517,8 @@ enum DisplayMode {
   displaySequencerProjects,
   displaySequencerDrum0107,
   displaySequencerDrum0814,
-  displaySequencerColors
+  displaySequencerColors,
+  displayCustomLedsEditor
 };
 DisplayMode displayMode = displayNormal;
 
@@ -725,6 +739,7 @@ struct DeviceSettings {
   boolean midiThrough;                       // false if incoming MIDI should be isolated, true if it should be passed through to the outgoing MIDI port
   short lastLoadedPreset;                    // the last settings preset that was loaded
   short lastLoadedProject;                   // the last sequencer project that was loaded
+  byte customLeds[LED_LAYER_SIZE];           // the custom LEDs that persist across power cycle
 };
 #define Device config.device
 
@@ -1104,6 +1119,8 @@ byte guitarTuningRowNum = 0;                        // active row number for con
 short guitarTuningPreviewNote = -1;                 // active note that is previewing the guitar tuning pitch
 short guitarTuningPreviewChannel = -1;              // active channel that is previewing the guitar tuning pitch
 
+byte lastCustomLedColor = COLOR_OFF;
+
 /************************* FUNCTION DECLARATIONS TO WORK AROUND COMPILER *************************/
 
 inline void selectSensorCell(byte col, byte row, byte switchCode);
@@ -1294,7 +1311,7 @@ void setup() {
   /*!!*/      globalReset = true;
   /*!!*/      dueFlashStorage.write(0, 254);
   /*!!*/    }
-  /*!!*/    // if only the global settings button is pressed at startup, activatate firmware upgrade mode
+  /*!!*/    // if only the global settings button is pressed at startup, activate firmware upgrade mode
   /*!!*/    else {
   /*!!*/      operatingMode = modeFirmware;
   /*!!*/  
@@ -1315,10 +1332,6 @@ void setup() {
   /*!!*/
   //*************************************************************************************************************************************************
 
-  // set display to normal performance mode & refresh it
-  clearDisplay();
-  setDisplayMode(displayNormal);
-
   // initialize input pins for 2 foot switches
   pinMode(FOOT_SW_LEFT, INPUT_PULLUP);
   pinMode(FOOT_SW_RIGHT, INPUT_PULLUP);
@@ -1329,6 +1342,10 @@ void setup() {
   initializeSequencer();
 
   reset();
+
+  // set display to normal performance mode & refresh it
+  clearDisplay();
+  setDisplayMode(displayNormal);
 
   // ensure that the switches that are pressed down for the global reset at boot are not taken into account any further
   if (globalReset) {
@@ -1343,6 +1360,8 @@ void setup() {
   initializeCalibrationSamples();
   initializeStorage();
   applyConfiguration();
+  loadCustomLedLayer();
+
 
   for (byte ss=0; ss<SECRET_SWITCHES; ++ss) {
     secretSwitch[ss] = false;
@@ -1476,15 +1495,7 @@ inline void modeLoopPerformance() {
       canShortCircuit = handleXYZupdate();                                       // handle any X, Y or Z movements
     }
     else if (previousTouch != untouchedCell && !sensorCell->isActiveTouch()) {   // if not touched now but touched before, it's been released
-
-      if (sensorCell->initialX != SHRT_MIN &&                                    // check if there was movement on the cell
-          abs(sensorCell->initialX - sensorCell->currentCalibratedX) > CALX_QUARTER_UNIT) {
-        if (calcTimeDelta(millis(), sensorCell->lastTouch) > 70 ) {              // only release if it's later than 70ms after the touch to debounce some note starts
-          sensorCell->clearCalculatingVelocity();
-          handleTouchRelease();
-        }
-      }
-      else if (calcTimeDelta(millis(), sensorCell->lastTouch) > 35 ) {           // only release if it's later than 35ms after the touch to debounce some note starts
+      if(sensorCell->isPastDebounceDelay()) {
         sensorCell->clearCalculatingVelocity();
         handleTouchRelease();
       }

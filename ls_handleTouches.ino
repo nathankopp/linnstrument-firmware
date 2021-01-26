@@ -110,6 +110,7 @@ void transferFromSameRowCell(byte col) {
   TouchInfo* fromCell = &cell(col, sensorRow);
 
   sensorCell->lastTouch = fromCell->lastTouch;
+  sensorCell->didMove = fromCell->didMove;
   sensorCell->initialX = fromCell->initialX;
   sensorCell->initialColumn = fromCell->initialColumn;  
   sensorCell->quantizationOffsetX = 0; // as soon as we transfer to an adjacent cell, the pitch quantization is reset to play the absolute pitch position instead
@@ -134,7 +135,8 @@ void transferFromSameRowCell(byte col) {
   noteTouchMapping[sensorSplit].changeCell(sensorCell->note, sensorCell->channel, sensorCol, sensorRow);
 
   fromCell->lastTouch = 0;
-  fromCell->initialX = SHRT_MIN;
+  fromCell->didMove = false;
+  fromCell->initialX = INVALID_DATA;
   fromCell->initialColumn = -1;
   fromCell->quantizationOffsetX = 0;
   fromCell->lastMovedX = 0;
@@ -183,6 +185,7 @@ void transferToSameRowCell(byte col) {
   TouchInfo* toCell = &cell(col, sensorRow);
   
   toCell->lastTouch = sensorCell->lastTouch;
+  toCell->didMove = sensorCell->didMove;
   toCell->initialX = sensorCell->initialX;
   toCell->initialColumn = sensorCell->initialColumn;
   toCell->quantizationOffsetX = 0; // as soon as we transfer to an adjacent cell, the pitch quantization is reset to play the absolute pitch position instead
@@ -207,7 +210,8 @@ void transferToSameRowCell(byte col) {
   noteTouchMapping[sensorSplit].changeCell(toCell->note, toCell->channel, col, sensorRow);
 
   sensorCell->lastTouch = 0;
-  sensorCell->initialX = SHRT_MIN;
+  sensorCell->didMove = false;
+  sensorCell->initialX = INVALID_DATA;
   sensorCell->initialColumn = -1;
   sensorCell->quantizationOffsetX = 0;
   sensorCell->lastMovedX = 0;
@@ -648,8 +652,6 @@ byte takeChannel(byte split, byte row) {
   }
 }
 
-#define INVALID_DATA SHRT_MAX
-
 void handleNonPlayingTouch() {
   switch (displayMode) {
     case displayNormal:
@@ -775,6 +777,9 @@ void handleNonPlayingTouch() {
     case displaySequencerColors:
       handleSequencerColorsNewTouch();
       break;
+    case displayCustomLedsEditor:
+      handleCustomLedsEditorNewTouch();
+      break;
   }
 }
 
@@ -813,6 +818,10 @@ boolean handleXYZupdate() {
       case displaySensorSensitivityZ:
         handleSensorSensitivityZHold();
         break;
+
+      case displayCustomLedsEditor:
+        handleCustomLedsEditorHold();
+        return false;
 
       default:
         // other displays don't need hold features
@@ -908,10 +917,11 @@ boolean handleXYZupdate() {
   // this cell corresponds to a playing note
   if (newVelocity) {
     sensorCell->lastTouch = lastTouchMoment;
+    sensorCell->didMove = false;
     sensorCell->lastMovedX = 0;
     sensorCell->lastValueX = INVALID_DATA;
     sensorCell->shouldRefreshX = true;
-    sensorCell->initialX = SHRT_MIN;
+    sensorCell->initialX = INVALID_DATA;
     sensorCell->quantizationOffsetX = 0;
     sensorCell->fxdRateCountX = fxdPitchHoldSamples[sensorSplit];
 
@@ -1816,6 +1826,9 @@ boolean handleNonPlayingRelease() {
         break;
       case displaySequencerColors:
         handleSequencerColorsRelease();
+        break;
+      case displayCustomLedsEditor:
+        handleCustomLedsEditorRelease();
         break;
       default:
         return false;
